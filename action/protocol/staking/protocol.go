@@ -39,6 +39,9 @@ const (
 	// _candidateNameSpace is the bucket name for candidate state
 	_candidateNameSpace = "Candidate"
 
+	// _typedCandidateNameSpace is the bucket name for typed candidate state
+	_typedCandidateNameSpace = "TypedCandidate"
+
 	// CandsMapNS is the bucket name to store candidate map
 	CandsMapNS = "CandsMap"
 )

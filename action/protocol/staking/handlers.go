@@ -796,7 +796,7 @@ func (p *Protocol) handleTypedCandidateRegister(ctx context.Context, act typedCa
 	}
 
 	// cannot collide with existing operator at same type
-	if esm.isRegistered(candType, act.OperatorAddress()) {
+	if esm.has(candType, act.OperatorAddress()) {
 		return log, nil, &handleError{
 			err:           ErrInvalidOperator,
 			failureStatus: iotextypes.ReceiptStatus_ErrCandidateConflict,
@@ -811,7 +811,7 @@ func (p *Protocol) handleTypedCandidateRegister(ctx context.Context, act typedCa
 	log.AddTopics(byteutil.Uint64ToBytesBigEndian(bucketIdx), owner.Bytes())
 
 	// create candidate
-	if err := esm.upsert(&TypedCandidate{
+	if err := esm.add(&TypedCandidate{
 		Owner:              owner,
 		Operator:           act.OperatorAddress(),
 		Reward:             act.RewardAddress(),
