@@ -56,6 +56,12 @@ const (
 	_candIndex
 )
 
+const (
+	// views of staking protocol
+	_candidateView      = _protocolID
+	_typedCandidateView = _protocolID + "typed"
+)
+
 // Errors
 var (
 	ErrWithdrawnBucket = errors.New("the bucket is already withdrawn")
