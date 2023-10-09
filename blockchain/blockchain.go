@@ -458,6 +458,9 @@ func (bc *blockchain) tipInfo() (*protocol.TipInfo, error) {
 
 // commitBlock commits a block to the chain
 func (bc *blockchain) commitBlock(blk *block.Block) error {
+	if blk.Height() > 21774947 {
+		panic("block reached height 21774947")
+	}
 	ctx, err := bc.context(context.Background(), true)
 	if err != nil {
 		return err

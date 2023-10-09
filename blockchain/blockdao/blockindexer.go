@@ -82,6 +82,9 @@ func (bic *BlockIndexerChecker) CheckIndexer(ctx context.Context, indexer BlockI
 		}
 	}
 	for i := startHeight; i <= targetHeight; i++ {
+		if i > 21774947 {
+			panic("block reached height 21774947")
+		}
 		blk, err := bic.dao.GetBlockByHeight(i)
 		if err != nil {
 			return err
