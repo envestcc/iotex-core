@@ -496,6 +496,7 @@ func (ws *workingSet) pickAndRunActions(
 				break
 			}
 			if nextAction.GasLimit() > blkCtx.GasLimit {
+				log.S().Warn("gas limit exceed block gas limit")
 				actionIterator.PopAccount()
 				continue
 			}
@@ -510,6 +511,7 @@ func (ws *workingSet) pickAndRunActions(
 				}
 			}
 			if err != nil {
+				log.S().Warn(err)
 				caller := nextAction.SenderAddress()
 				if caller == nil {
 					return nil, errors.New("failed to get address")
@@ -525,6 +527,7 @@ func (ws *workingSet) pickAndRunActions(
 			case action.ErrChainID:
 				continue
 			case action.ErrGasLimit:
+				log.S().Warn(err)
 				actionIterator.PopAccount()
 				continue
 			default:
