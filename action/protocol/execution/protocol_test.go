@@ -289,7 +289,7 @@ func readExecution(
 	return sf.SimulateExecution(ctx, addr, exec, dao.GetBlockHash)
 }
 
-func runExecutions(
+func (sct *SmartContractTest) runExecutions(
 	bc blockchain.Blockchain,
 	sf factory.Factory,
 	dao blockdao.BlockDAO,
@@ -325,12 +325,14 @@ func runExecutions(
 			return nil, nil, err
 		}
 		builder := &action.EnvelopeBuilder{}
-		elp := builder.SetAction(exec).
+		builder = builder.SetAction(exec).
 			SetNonce(exec.Nonce()).
 			SetGasLimit(ecfg.GasLimit()).
-			SetGasPrice(ecfg.GasPrice()).
-			SetChainID(bc.ChainID()).
-			Build()
+			SetGasPrice(ecfg.GasPrice())
+		if sct.InitGenesis.IsParis {
+			builder = builder.SetChainID(bc.ChainID())
+		}
+		elp := builder.Build()
 		selp, err := action.Sign(elp, ecfg.PrivateKey())
 		if err != nil {
 			return nil, nil, err
@@ -481,7 +483,7 @@ func (sct *SmartContractTest) deployContracts(
 		if contract.AppendContractAddress {
 			contract.ContractAddressToAppend = contractAddresses[contract.ContractIndexToAppend]
 		}
-		receipts, _, err := runExecutions(bc, sf, dao, ap, []*ExecutionConfig{&contract}, []string{action.EmptyAddress})
+		receipts, _, err := sct.runExecutions(bc, sf, dao, ap, []*ExecutionConfig{&contract}, []string{action.EmptyAddress})
 		r.NoError(err)
 		r.Equal(1, len(receipts))
 		receipt := receipts[0]
@@ -556,7 +558,7 @@ func (sct *SmartContractTest) run(r *require.Assertions) {
 			}
 		} else {
 			var receipts []*action.Receipt
-			receipts, blkInfo, err = runExecutions(bc, sf, dao, ap, []*ExecutionConfig{&exec}, []string{contractAddr})
+			receipts, blkInfo, err = sct.runExecutions(bc, sf, dao, ap, []*ExecutionConfig{&exec}, []string{contractAddr})
 			r.NoError(err)
 			r.Equal(1, len(receipts))
 			receipt = receipts[0]
@@ -1327,7 +1329,7 @@ func benchmarkHotContractWithFactory(b *testing.B, async bool) {
 	contractAddr := contractAddresses[0]
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		receipts, _, err := runExecutions(
+		receipts, _, err := sct.runExecutions(
 			bc, sf, dao, ap, []*ExecutionConfig{
 				{
 					RawPrivateKey: "cfa6ef757dee2e50351620dca002d32b9c090cfda55fb81f37f1d26b273743f1",
@@ -1358,7 +1360,7 @@ func benchmarkHotContractWithFactory(b *testing.B, async bool) {
 			})
 			contractAddrs = append(contractAddrs, contractAddr)
 		}
-		receipts, _, err = runExecutions(bc, sf, dao, ap, ecfgs, contractAddrs)
+		receipts, _, err = sct.runExecutions(bc, sf, dao, ap, ecfgs, contractAddrs)
 		r.NoError(err)
 		for _, receipt := range receipts {
 			r.Equal(uint64(1), receipt.Status)
@@ -1404,7 +1406,7 @@ func benchmarkHotContractWithStateDB(b *testing.B, cachedStateDBOption bool) {
 	contractAddr := contractAddresses[0]
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		receipts, _, err := runExecutions(
+		receipts, _, err := sct.runExecutions(
 			bc, sf, dao, ap, []*ExecutionConfig{
 				{
 					RawPrivateKey: "cfa6ef757dee2e50351620dca002d32b9c090cfda55fb81f37f1d26b273743f1",
@@ -1435,7 +1437,7 @@ func benchmarkHotContractWithStateDB(b *testing.B, cachedStateDBOption bool) {
 			})
 			contractAddrs = append(contractAddrs, contractAddr)
 		}
-		receipts, _, err = runExecutions(bc, sf, dao, ap, ecfgs, contractAddrs)
+		receipts, _, err = sct.runExecutions(bc, sf, dao, ap, ecfgs, contractAddrs)
 		r.NoError(err)
 		for _, receipt := range receipts {
 			r.Equal(uint64(1), receipt.Status)
