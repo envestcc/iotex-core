@@ -19,6 +19,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/mohae/deepcopy"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -523,7 +524,7 @@ func (sct *SmartContractTest) deployContracts(
 func (sct *SmartContractTest) run(r *require.Assertions) {
 	// prepare blockchain
 	ctx := context.Background()
-	cfg := config.Default
+	cfg := deepcopy.Copy(config.Default).(config.Config)
 	cfg.Chain.ProducerPrivKey = identityset.PrivateKey(28).HexString()
 	cfg.Chain.EnableTrielessStateDB = false
 	bc, sf, dao, ap := sct.prepareBlockchain(ctx, cfg, r)
