@@ -280,6 +280,7 @@ func (p *Protocol) handleChangeCandidate(ctx context.Context, act *action.Change
 ) (*receiptLog, error) {
 	actionCtx := protocol.MustGetActionCtx(ctx)
 	featureCtx := protocol.MustGetFeatureCtx(ctx)
+	blkCtx := protocol.MustGetBlockCtx(ctx)
 	log := newReceiptLog(p.addr.String(), HandleChangeCandidate, featureCtx.NewStakingReceiptFormat)
 
 	_, fetchErr := fetchCaller(ctx, csm, big.NewInt(0))
@@ -292,9 +293,23 @@ func (p *Protocol) handleChangeCandidate(ctx context.Context, act *action.Change
 		return log, errCandNotExist
 	}
 
-	bucket, fetchErr := p.fetchBucketAndValidate(csm, actionCtx.Caller, act.BucketIndex(), true, false)
-	if fetchErr != nil {
-		return log, fetchErr
+	bucket, rErr := p.fetchBucket(csm, act.BucketIndex())
+	if rErr != nil {
+		return log, rErr
+	}
+	if rErr = validateBucketOwner(bucket, actionCtx.Caller); rErr != nil {
+		return log, rErr
+	}
+	if featureCtx.DisableDelegateEndorsement && csm.ContainsSelfStakingBucket(bucket.Index) {
+		return log, &handleError{
+			err:           errors.New("self staking bucket cannot be processed"),
+			failureStatus: iotextypes.ReceiptStatus_ErrInvalidBucketType,
+		}
+	} else if rErr = validateBucketSelfStake(csm, bucket, false); rErr != nil {
+		return log, rErr
+	}
+	if rErr := validateBucketEndorsement(NewEndorsementStateManager(csm.SM()), bucket, false, blkCtx.BlockHeight); rErr != nil {
+		return log, rErr
 	}
 	log.AddTopics(byteutil.Uint64ToBytesBigEndian(bucket.Index), bucket.Candidate.Bytes(), candidate.Owner.Bytes())
 
@@ -338,6 +353,18 @@ func (p *Protocol) handleChangeCandidate(ctx context.Context, act *action.Change
 			err:           errors.Wrapf(err, "failed to subtract vote for previous candidate %s", prevCandidate.Owner.String()),
 			failureStatus: iotextypes.ReceiptStatus_ErrNotEnoughBalance,
 		}
+	}
+	// clear selfstake if it's legacy selfstake bucket
+	legacySelfStake, err := isLegacySelfStakeBucket(csm, prevCandidate.SelfStakeBucketIdx)
+	if err != nil {
+		return log, &handleError{
+			err:           err,
+			failureStatus: iotextypes.ReceiptStatus_ErrUnknown,
+		}
+	}
+	if !featureCtx.DisableDelegateEndorsement && legacySelfStake {
+		prevCandidate.SelfStake.SetInt64(0)
+		prevCandidate.SelfStakeBucketIdx = candidateNoSelfStakeBucketIndex
 	}
 	if err := csm.Upsert(prevCandidate); err != nil {
 		return log, csmErrorToHandleError(prevCandidate.Owner.String(), err)
@@ -894,4 +921,35 @@ func BucketIndexFromReceiptLog(log *iotextypes.Log) (uint64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// isLegacySelfStakeBucket checks if the bucket is legacy self-stake bucket which need to be clear
+func isLegacySelfStakeBucket(csm CandidateStateManager, index uint64) (bool, error) {
+	if index == candidateNoSelfStakeBucketIndex {
+		return false, nil
+	}
+	bucket, err := csm.getBucket(index)
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrWithdrawnBucket):
+		// need if the bucket is withdrawn
+		return true, nil
+	default:
+		return false, err
+	}
+	// need if the bucket is unstaked
+	if address.Equal(bucket.Owner, bucket.Candidate) {
+		return bucket.isUnstaked(), nil
+	}
+	// need endorse bucket which is expired
+	esm := NewEndorsementStateManager(csm.SM())
+	height, err := esm.Height()
+	if err != nil {
+		return false, err
+	}
+	endorse, err := esm.Get(index)
+	if err != nil {
+		return false, err
+	}
+	return endorse.Status(height) != EndorseExpired, nil
 }
