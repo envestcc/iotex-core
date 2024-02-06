@@ -364,17 +364,19 @@ func (p *Protocol) handleChangeCandidate(ctx context.Context, act *action.Change
 			failureStatus: iotextypes.ReceiptStatus_ErrNotEnoughBalance,
 		}
 	}
-	// clear selfstake if it's legacy selfstake bucket
-	_, legacySelfStake, err := isSelfStakeBucket(csm, prevCandidate.SelfStakeBucketIdx)
-	if err != nil {
-		return log, &handleError{
-			err:           err,
-			failureStatus: iotextypes.ReceiptStatus_ErrUnknown,
+	if !featureCtx.DisableDelegateEndorsement {
+		// clear selfstake if it's legacy selfstake bucket
+		_, legacySelfStake, err := isSelfStakeBucket(csm, prevCandidate.SelfStakeBucketIdx)
+		if err != nil {
+			return log, &handleError{
+				err:           err,
+				failureStatus: iotextypes.ReceiptStatus_ErrUnknown,
+			}
 		}
-	}
-	if !featureCtx.DisableDelegateEndorsement && legacySelfStake {
-		prevCandidate.SelfStake.SetInt64(0)
-		prevCandidate.SelfStakeBucketIdx = candidateNoSelfStakeBucketIndex
+		if legacySelfStake {
+			prevCandidate.SelfStake.SetInt64(0)
+			prevCandidate.SelfStakeBucketIdx = candidateNoSelfStakeBucketIndex
+		}
 	}
 	if err := csm.Upsert(prevCandidate); err != nil {
 		return log, csmErrorToHandleError(prevCandidate.Owner.String(), err)
