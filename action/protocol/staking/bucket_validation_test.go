@@ -74,7 +74,7 @@ func TestValidateBucket(t *testing.T) {
 	t.Run("validate bucket self staked", func(t *testing.T) {
 		csm, _ := initState()
 		owner := identityset.Address(1)
-		candidate := identityset.Address(2)
+		candidate := identityset.Address(1)
 		// not selfstaked bucket
 		bkt := NewVoteBucket(candidate, owner, big.NewInt(10000), 1, time.Now(), false)
 		bktIdx, err := csm.putBucketAndIndex(bkt)
