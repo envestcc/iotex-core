@@ -42,6 +42,7 @@ func TestProtocol_HandleCandidateEndorsement(t *testing.T) {
 		{identityset.Address(1), identityset.Address(2), "1200000000000000000000000", 91, true, false, nil, 1},
 		{identityset.Address(2), identityset.Address(2), "1200000000000000000000000", 91, true, false, nil, 0},
 		{identityset.Address(1), identityset.Address(1), "1200000000000000000000000", 30, false, false, nil, 0},
+		{identityset.Address(1), identityset.Address(1), "1200000000000000000000000", 30, true, true, nil, 0},
 	}
 	initCandidateCfgs := []*candidateConfig{
 		{identityset.Address(1), identityset.Address(7), identityset.Address(1), "test1"},
@@ -141,7 +142,7 @@ func TestProtocol_HandleCandidateEndorsement(t *testing.T) {
 		},
 		{
 			"endorse candidate with self-staked bucket",
-			[]uint64{0, 3},
+			[]uint64{0, 11},
 			[]uint64{0, 1},
 			1300000,
 			identityset.Address(1),
