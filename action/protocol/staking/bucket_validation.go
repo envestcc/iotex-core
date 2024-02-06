@@ -55,16 +55,15 @@ func validateBucketCandidate(bucket *VoteBucket, candidate address.Address) Rece
 }
 
 func validateBucketSelfStake(csm CandidateStateManager, bucket *VoteBucket, isSelfStaked bool) ReceiptError {
-	contain := csm.ContainsSelfStakingBucket(bucket.Index)
-	legacy, err := isLegacySelfStakeBucket(csm, bucket.Index)
+	selfstake, legacy, err := isSelfStakeBucket(csm, bucket.Index)
 	if err != nil {
 		return &handleError{
 			err:           err,
 			failureStatus: iotextypes.ReceiptStatus_ErrUnknown,
 		}
 	}
-	selfstake := contain && !legacy
-	if selfstake != isSelfStaked {
+	status := selfstake && !legacy
+	if status != isSelfStaked {
 		err := errors.New("self staking bucket cannot be processed")
 		if isSelfStaked {
 			err = errors.New("bucket is not self staking")

@@ -172,14 +172,23 @@ func (p *Protocol) handleUnstake(ctx context.Context, act *action.Unstake, csm C
 			failureStatus: iotextypes.ReceiptStatus_ErrUnstakeBeforeMaturity,
 		}
 	}
-
+	if rErr := validateBucketEndorsement(NewEndorsementStateManager(csm.SM()), bucket, false, blkCtx.BlockHeight); rErr != nil {
+		return log, rErr
+	}
+	// TODO: cannot unstake if selected as delegates in this or next epoch
+	selfStake, legacy, err := isSelfStakeBucket(csm, bucket.Index)
+	if err != nil {
+		return log, &handleError{
+			err:           err,
+			failureStatus: iotextypes.ReceiptStatus_ErrUnknown,
+		}
+	}
 	// update bucket
 	bucket.UnstakeStartTime = blkCtx.BlockTimeStamp.UTC()
 	if err := csm.updateBucket(act.BucketIndex(), bucket); err != nil {
 		return log, errors.Wrapf(err, "failed to update bucket for voter %s", bucket.Owner.String())
 	}
-
-	weightedVote := p.calculateVoteWeight(bucket, csm.ContainsSelfStakingBucket(act.BucketIndex()))
+	weightedVote := p.calculateVoteWeight(bucket, selfStake && !legacy)
 	if err := candidate.SubVote(weightedVote); err != nil {
 		return log, &handleError{
 			err:           errors.Wrapf(err, "failed to subtract vote for candidate %s", bucket.Candidate.String()),
@@ -187,8 +196,9 @@ func (p *Protocol) handleUnstake(ctx context.Context, act *action.Unstake, csm C
 		}
 	}
 	// clear candidate's self stake if the bucket is self staking
-	if csm.ContainsSelfStakingBucket(act.BucketIndex()) {
+	if selfStake {
 		candidate.SelfStake = big.NewInt(0)
+		// TODO: remove legacy self stake bucket
 	}
 	if err := csm.Upsert(candidate); err != nil {
 		return log, csmErrorToHandleError(candidate.Owner.String(), err)
@@ -355,7 +365,7 @@ func (p *Protocol) handleChangeCandidate(ctx context.Context, act *action.Change
 		}
 	}
 	// clear selfstake if it's legacy selfstake bucket
-	legacySelfStake, err := isLegacySelfStakeBucket(csm, prevCandidate.SelfStakeBucketIdx)
+	_, legacySelfStake, err := isSelfStakeBucket(csm, prevCandidate.SelfStakeBucketIdx)
 	if err != nil {
 		return log, &handleError{
 			err:           err,
@@ -923,33 +933,36 @@ func BucketIndexFromReceiptLog(log *iotextypes.Log) (uint64, bool) {
 	}
 }
 
-// isLegacySelfStakeBucket checks if the bucket is legacy self-stake bucket which need to be clear
-func isLegacySelfStakeBucket(csm CandidateStateManager, index uint64) (bool, error) {
-	if index == candidateNoSelfStakeBucketIndex {
-		return false, nil
+func isSelfStakeBucket(csm CandidateStateManager, index uint64) (selfStake, legacy bool, err error) {
+	selfStake = csm.ContainsSelfStakingBucket(index)
+	if !selfStake {
+		return
 	}
 	bucket, err := csm.getBucket(index)
 	switch {
 	case err == nil:
 	case errors.Is(err, ErrWithdrawnBucket):
 		// need if the bucket is withdrawn
-		return true, nil
+		legacy = true
+		return
 	default:
-		return false, err
+		return
 	}
 	// need if the bucket is unstaked
 	if address.Equal(bucket.Owner, bucket.Candidate) {
-		return bucket.isUnstaked(), nil
+		legacy = bucket.isUnstaked()
+		return
 	}
 	// need endorse bucket which is expired
 	esm := NewEndorsementStateManager(csm.SM())
 	height, err := esm.Height()
 	if err != nil {
-		return false, err
+		return
 	}
 	endorse, err := esm.Get(index)
 	if err != nil {
-		return false, err
+		return
 	}
-	return endorse.Status(height) != EndorseExpired, nil
+	legacy = endorse.Status(height) != EndorseExpired
+	return
 }
