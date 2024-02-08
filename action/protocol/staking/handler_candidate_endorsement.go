@@ -46,7 +46,11 @@ func (p *Protocol) handleCandidateEndorsement(ctx context.Context, act *action.C
 		// expire immediately if the bucket is not self-staked
 		// otherwise, expire after withdraw waiting period
 		expireHeight = protocol.MustGetBlockCtx(ctx).BlockHeight
-		if csm.ContainsSelfStakingBucket(bucket.Index) {
+		selfStake, err := isSelfStakeBucket(featureCtx, csm, bucket.Index)
+		if err != nil {
+			return log, nil, err
+		}
+		if selfStake {
 			expireHeight += p.config.EndorsementWithdrawWaitingBlocks
 		}
 	}
@@ -60,6 +64,7 @@ func (p *Protocol) handleCandidateEndorsement(ctx context.Context, act *action.C
 }
 
 func (p *Protocol) validateEndorsement(ctx context.Context, csm CandidateStateManager, esm *EndorsementStateManager, caller address.Address, bucket *VoteBucket, cand *Candidate) ReceiptError {
+	featureCtx := protocol.MustGetFeatureCtx(ctx)
 	if err := validateBucketOwner(bucket, caller); err != nil {
 		return err
 	}
@@ -72,7 +77,7 @@ func (p *Protocol) validateEndorsement(ctx context.Context, csm CandidateStateMa
 	if err := validateBucketCandidate(bucket, cand.Owner); err != nil {
 		return err
 	}
-	if err := validateBucketSelfStake(csm, bucket, false); err != nil {
+	if err := validateBucketSelfStake(featureCtx, csm, bucket, false); err != nil {
 		return err
 	}
 	return validateBucketEndorsement(esm, bucket, false, protocol.MustGetBlockCtx(ctx).BlockHeight)
