@@ -1,11 +1,27 @@
 package stakingindex
 
-import "github.com/iotexproject/iotex-address/address"
+import (
+	"github.com/iotexproject/iotex-address/address"
+
+	"github.com/iotexproject/iotex-core/db"
+)
 
 type cache struct {
 	buckets            map[uint64]*Bucket
 	bucketsByCandidate map[string]map[uint64]bool
 	totalBucketCount   uint64
+}
+
+func newCache() *cache {
+	return &cache{
+		buckets:            make(map[uint64]*Bucket),
+		bucketsByCandidate: make(map[string]map[uint64]bool),
+	}
+}
+
+func (s *cache) Load(kvstore db.KVStore) error {
+	// TODO: implement this
+	return nil
 }
 
 func (s *cache) Copy() *cache {

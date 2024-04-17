@@ -13,7 +13,20 @@ type eventHandler struct {
 	delta batch.KVStoreBatch // delta for db to store buckets of current block
 }
 
+func newEventHandler(dirty *cache) *eventHandler {
+	return &eventHandler{
+		dirty: dirty,
+		delta: batch.NewBatch(),
+	}
+}
+
 func (eh *eventHandler) HandleEvent(ctx context.Context, blk *block.Block, log *action.Log) error {
 	// TODO: implement this
 	return nil
+}
+
+func (eh *eventHandler) Finalize() (batch.KVStoreBatch, *cache) {
+	delta, dirty := eh.delta, eh.dirty
+	eh.delta, eh.dirty = nil, nil
+	return delta, dirty
 }
