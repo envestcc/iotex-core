@@ -56,7 +56,7 @@ func (s *cache) Load(kvstore db.KVStore) error {
 func (s *cache) Copy() *cache {
 	c := newCache()
 	for k, v := range s.buckets {
-		c.buckets[k] = cloneBucket(v)
+		c.buckets[k] = v.Clone()
 	}
 	for cand, btks := range s.bucketsByCandidate {
 		c.bucketsByCandidate[cand] = make(map[uint64]struct{})
@@ -103,14 +103,14 @@ func (s *cache) DeleteBucket(id uint64) {
 func (s *cache) Buckets() []*Bucket {
 	buckets := make([]*Bucket, 0, len(s.buckets))
 	for _, bkt := range s.buckets {
-		buckets = append(buckets, cloneBucket(bkt))
+		buckets = append(buckets, bkt)
 	}
 	return buckets
 }
 
 func (s *cache) Bucket(id uint64) *Bucket {
 	if bkt, ok := s.buckets[id]; ok {
-		return cloneBucket(bkt)
+		return bkt
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ func (s *cache) BucketsByIndices(indices []uint64) []*Bucket {
 	buckets := make([]*Bucket, 0, len(indices))
 	for _, idx := range indices {
 		if bkt, ok := s.buckets[idx]; ok {
-			buckets = append(buckets, cloneBucket(bkt))
+			buckets = append(buckets, bkt)
 		}
 	}
 	return buckets
@@ -130,7 +130,7 @@ func (s *cache) BucketsByCandidate(candidate address.Address) []*Bucket {
 	buckets := make([]*Bucket, 0, len(s.bucketsByCandidate[cand]))
 	for idx := range s.bucketsByCandidate[cand] {
 		if bkt, ok := s.buckets[idx]; ok {
-			buckets = append(buckets, cloneBucket(bkt))
+			buckets = append(buckets, bkt)
 		}
 	}
 	return buckets
