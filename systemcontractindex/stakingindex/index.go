@@ -23,6 +23,7 @@ var (
 )
 
 type (
+	// Indexer is the staking indexer
 	Indexer struct {
 		common *systemcontractindex.IndexerCommon
 		cache  *cache // in-memory cache, used to query index data
@@ -30,6 +31,7 @@ type (
 	}
 )
 
+// NewIndexer creates a new staking indexer
 func NewIndexer(kvstore db.KVStore, contractAddr string, startHeight uint64) *Indexer {
 	return &Indexer{
 		common: systemcontractindex.NewIndexerCommon(kvstore, stakingNS, stakingHeightKey, contractAddr, startHeight),
