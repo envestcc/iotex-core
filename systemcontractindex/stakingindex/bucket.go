@@ -5,8 +5,12 @@ import (
 	"time"
 
 	"github.com/iotexproject/iotex-address/address"
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/iotexproject/iotex-core/action/protocol/staking"
+	"github.com/iotexproject/iotex-core/pkg/util/byteutil"
+	"github.com/iotexproject/iotex-core/systemcontractindex/stakingindex/stakingpb"
 )
 
 type VoteBucket = staking.VoteBucket
@@ -19,6 +23,56 @@ type Bucket struct {
 	CreatedAt                 uint64
 	UnlockedAt                uint64
 	UnstakedAt                uint64
+}
+
+func (bi *Bucket) Serialize() []byte {
+	return byteutil.Must(proto.Marshal(bi.toProto()))
+}
+
+// Deserialize deserializes the bucket info
+func (bi *Bucket) Deserialize(b []byte) error {
+	m := stakingpb.Bucket{}
+	if err := proto.Unmarshal(b, &m); err != nil {
+		return err
+	}
+	return bi.loadProto(&m)
+}
+
+// clone clones the bucket info
+func (bi *Bucket) toProto() *stakingpb.Bucket {
+	pb := &stakingpb.Bucket{
+		Candidate:  bi.Candidate.String(),
+		CreatedAt:  bi.CreatedAt,
+		Owner:      bi.Owner.String(),
+		UnlockedAt: bi.UnlockedAt,
+		UnstakedAt: bi.UnstakedAt,
+		Amount:     bi.StakedAmount.String(),
+		Duration:   bi.StakedDurationBlockNumber,
+	}
+	return pb
+}
+
+func (bi *Bucket) loadProto(p *stakingpb.Bucket) error {
+	candidate, err := address.FromString(p.Candidate)
+	if err != nil {
+		return err
+	}
+	owner, err := address.FromString(p.Owner)
+	if err != nil {
+		return err
+	}
+	amount, ok := new(big.Int).SetString(p.Amount, 10)
+	if !ok {
+		return errors.Errorf("invalid staked amount %s", p.Amount)
+	}
+	bi.CreatedAt = p.CreatedAt
+	bi.UnlockedAt = p.UnlockedAt
+	bi.UnstakedAt = p.UnstakedAt
+	bi.Candidate = candidate
+	bi.Owner = owner
+	bi.StakedAmount = amount
+	bi.StakedDurationBlockNumber = p.Duration
+	return nil
 }
 
 func (b *Bucket) Clone() *Bucket {
@@ -36,11 +90,6 @@ func (b *Bucket) Clone() *Bucket {
 	stakingAmount := new(big.Int).Set(b.StakedAmount)
 	clone.StakedAmount = stakingAmount
 	return clone
-}
-
-func (vb *Bucket) Deserialize(buf []byte) error {
-	// TODO: implement this function
-	return nil
 }
 
 func assembleVoteBucket(token uint64, bkt *Bucket, contractAddr string, blockInterval time.Duration) *VoteBucket {
