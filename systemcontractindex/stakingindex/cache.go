@@ -100,12 +100,12 @@ func (s *cache) DeleteBucket(id uint64) {
 	delete(s.buckets, id)
 }
 
-func (s *cache) Buckets() []*Bucket {
-	buckets := make([]*Bucket, 0, len(s.buckets))
-	for _, bkt := range s.buckets {
-		buckets = append(buckets, bkt)
+func (s *cache) BucketIdxs() []uint64 {
+	idxs := make([]uint64, 0, len(s.buckets))
+	for id := range s.buckets {
+		idxs = append(idxs, id)
 	}
-	return buckets
+	return idxs
 }
 
 func (s *cache) Bucket(id uint64) *Bucket {
@@ -125,13 +125,11 @@ func (s *cache) BucketsByIndices(indices []uint64) []*Bucket {
 	return buckets
 }
 
-func (s *cache) BucketsByCandidate(candidate address.Address) []*Bucket {
+func (s *cache) BucketIdxsByCandidate(candidate address.Address) []uint64 {
 	cand := candidate.String()
-	buckets := make([]*Bucket, 0, len(s.bucketsByCandidate[cand]))
+	buckets := make([]uint64, 0, len(s.bucketsByCandidate[cand]))
 	for idx := range s.bucketsByCandidate[cand] {
-		if bkt, ok := s.buckets[idx]; ok {
-			buckets = append(buckets, bkt)
-		}
+		buckets = append(buckets, idx)
 	}
 	return buckets
 }
