@@ -33,6 +33,9 @@ var (
 	//go:embed staking.json
 	stakingContractJSONABI string
 	stakingContractABI     abi.ABI
+
+	// ErrBucketNotExist is the error when bucket does not exist
+	ErrBucketNotExist = errors.New("bucket does not exist")
 )
 
 func init() {
@@ -73,14 +76,16 @@ func (eh *eventHandler) HandleEvent(ctx context.Context, blk *block.Block, log *
 		return eh.handleUnlockedEvent(event, blk.Height())
 	case "Unstaked":
 		return eh.handleUnstakedEvent(event, blk.Height())
-	// case "Merged":
-	// 	return eh.handleMergedEvent(event)
-	// case "BucketExpanded":
-	// 	return eh.handleBucketExpandedEvent(event)
+	case "Merged":
+		return eh.handleMergedEvent(event)
+	case "BucketExpanded":
+		return eh.handleBucketExpandedEvent(event)
 	case "DelegateChanged":
 		return eh.handleDelegateChangedEvent(event)
 	case "Withdrawal":
 		return eh.handleWithdrawalEvent(event)
+	case "Donated":
+		return eh.handleDonatedEvent(event)
 	case "Transfer":
 		return eh.handleTransferEvent(event)
 	case "Approval", "ApprovalForAll", "OwnershipTransferred", "Paused", "Unpaused":
@@ -223,6 +228,78 @@ func (eh *eventHandler) handleTransferEvent(event abiutil.EventParam) error {
 		bkt.Owner = to
 		eh.dirty.PutBucket(tokenID, bkt)
 	}
+	return nil
+}
+
+func (eh *eventHandler) handleMergedEvent(event abiutil.EventParam) error {
+	tokenIDsParam, err := event.FieldUint256Slice("tokenIds")
+	if err != nil {
+		return err
+	}
+	amountParam, err := event.FieldUint256("amount")
+	if err != nil {
+		return err
+	}
+	durationParam, err := event.FieldUint256("duration")
+	if err != nil {
+		return err
+	}
+
+	// merge to the first bucket
+	b := eh.dirty.Bucket(tokenIDsParam[0].Uint64())
+	if b == nil {
+		return errors.Wrapf(ErrBucketNotExist, "token id %d", tokenIDsParam[0].Uint64())
+	}
+	b.StakedAmount = amountParam
+	b.StakedDurationBlockNumber = durationParam.Uint64()
+	b.UnlockedAt = maxBlockNumber
+	for i := 1; i < len(tokenIDsParam); i++ {
+		eh.dirty.DeleteBucket(tokenIDsParam[i].Uint64())
+	}
+	eh.dirty.PutBucket(tokenIDsParam[0].Uint64(), b)
+	return nil
+}
+
+func (eh *eventHandler) handleBucketExpandedEvent(event abiutil.EventParam) error {
+	tokenIDParam, err := event.IndexedFieldUint256("tokenId")
+	if err != nil {
+		return err
+	}
+	amountParam, err := event.FieldUint256("amount")
+	if err != nil {
+		return err
+	}
+	durationParam, err := event.FieldUint256("duration")
+	if err != nil {
+		return err
+	}
+
+	b := eh.dirty.Bucket(tokenIDParam.Uint64())
+	if b == nil {
+		return errors.Wrapf(ErrBucketNotExist, "token id %d", tokenIDParam.Uint64())
+	}
+	b.StakedAmount = amountParam
+	b.StakedDurationBlockNumber = durationParam.Uint64()
+	eh.dirty.PutBucket(tokenIDParam.Uint64(), b)
+	return nil
+}
+
+func (eh *eventHandler) handleDonatedEvent(event abiutil.EventParam) error {
+	tokenIDParam, err := event.IndexedFieldUint256("tokenId")
+	if err != nil {
+		return err
+	}
+	amountParam, err := event.FieldUint256("amount")
+	if err != nil {
+		return err
+	}
+
+	b := eh.dirty.Bucket(tokenIDParam.Uint64())
+	if b == nil {
+		return errors.Wrapf(ErrBucketNotExist, "token id %d", tokenIDParam.Uint64())
+	}
+	b.StakedAmount.Sub(b.StakedAmount, amountParam)
+	eh.dirty.PutBucket(tokenIDParam.Uint64(), b)
 	return nil
 }
 
