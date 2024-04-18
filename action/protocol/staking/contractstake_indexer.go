@@ -30,4 +30,15 @@ type (
 		// BucketTypes returns the active bucket types
 		BucketTypes(height uint64) ([]*ContractStakingBucketType, error)
 	}
+
+	ContractStakingIndexerV2 interface {
+		// Buckets returns active buckets
+		Buckets(height uint64) ([]*VoteBucket, error)
+		// BucketsByIndices returns active buckets by indices
+		BucketsByIndices([]uint64, uint64) ([]*VoteBucket, error)
+		// BucketsByCandidate returns active buckets by candidate
+		BucketsByCandidate(ownerAddr address.Address, height uint64) ([]*VoteBucket, error)
+		// TotalBucketCount returns the total number of buckets including burned buckets
+		TotalBucketCount(height uint64) (uint64, error)
+	}
 )

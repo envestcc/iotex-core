@@ -121,6 +121,7 @@ type (
 		RefactorFreshAccountConversion          bool
 		SuicideTxLogMismatchPanic               bool
 		PanicUnrecoverableError                 bool
+		UseContractStakingV1                    bool
 	}
 
 	// FeatureWithHeightCtx provides feature check functions.
@@ -267,6 +268,7 @@ func WithFeatureCtx(ctx context.Context) context.Context {
 			RefactorFreshAccountConversion:          g.IsTsunami(height),
 			SuicideTxLogMismatchPanic:               g.IsToBeEnabled(height),
 			PanicUnrecoverableError:                 g.IsToBeEnabled(height),
+			UseContractStakingV1:                    !g.IsToBeEnabled(height),
 		},
 	)
 }

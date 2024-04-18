@@ -76,13 +76,14 @@ type (
 
 	// Protocol defines the protocol of handling staking
 	Protocol struct {
-		addr                   address.Address
-		depositGas             DepositGas
-		config                 Configuration
-		candBucketsIndexer     *CandidatesBucketsIndexer
-		contractStakingIndexer ContractStakingIndexer
-		voteReviser            *VoteReviser
-		patch                  *PatchStore
+		addr                     address.Address
+		depositGas               DepositGas
+		config                   Configuration
+		candBucketsIndexer       *CandidatesBucketsIndexer
+		contractStakingIndexer   ContractStakingIndexer
+		contractStakingIndexerV2 ContractStakingIndexerV2
+		voteReviser              *VoteReviser
+		patch                    *PatchStore
 	}
 
 	// Configuration is the staking protocol configuration.
@@ -514,18 +515,12 @@ func (p *Protocol) ActiveCandidates(ctx context.Context, sr protocol.StateReader
 	}
 	list := c.AllCandidates()
 	cand := make(CandidateList, 0, len(list))
-	featureCtx := protocol.MustGetFeatureCtx(ctx)
 	for i := range list {
-		if p.contractStakingIndexer != nil && featureCtx.AddContractStakingVotes {
-			// specifying the height param instead of query latest from indexer directly, aims to cause error when indexer falls behind
-			// currently there are two possible sr (i.e. factory or workingSet), it means the height could be chain height or current block height
-			// using height-1 will cover the two scenario while detect whether the indexer is lagging behind
-			contractVotes, err := p.contractStakingIndexer.CandidateVotes(ctx, list[i].Owner, srHeight-1)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to get CandidateVotes from contractStakingIndexer")
-			}
-			list[i].Votes.Add(list[i].Votes, contractVotes)
+		csVotes, err := p.contractStakingVotes(ctx, list[i].Owner, srHeight-1)
+		if err != nil {
+			return nil, err
 		}
+		list[i].Votes.Add(list[i].Votes, csVotes)
 		active, err := p.isActiveCandidate(ctx, c, list[i])
 		if err != nil {
 			return nil, err
@@ -690,6 +685,34 @@ func (p *Protocol) needToReadCandsMap(ctx context.Context, height uint64) bool {
 func (p *Protocol) needToWriteCandsMap(ctx context.Context, height uint64) bool {
 	fCtx := protocol.MustGetFeatureWithHeightCtx(ctx)
 	return height >= p.config.PersistStakingPatchBlock && fCtx.CandCenterHasAlias(height)
+}
+
+func (p *Protocol) contractStakingVotes(ctx context.Context, candidate address.Address, height uint64) (*big.Int, error) {
+	featureCtx := protocol.MustGetFeatureCtx(ctx)
+	votes := big.NewInt(0)
+	if p.contractStakingIndexer != nil && featureCtx.AddContractStakingVotes {
+		// specifying the height param instead of query latest from indexer directly, aims to cause error when indexer falls behind
+		// currently there are two possible sr (i.e. factory or workingSet), it means the height could be chain height or current block height
+		// using height-1 will cover the two scenario while detect whether the indexer is lagging behind
+		contractVotes, err := p.contractStakingIndexer.CandidateVotes(ctx, candidate, height-1)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get CandidateVotes from contractStakingIndexer")
+		}
+		votes.Add(votes, contractVotes)
+	}
+	if p.contractStakingIndexerV2 != nil && !featureCtx.UseContractStakingV1 {
+		btks, err := p.contractStakingIndexerV2.BucketsByCandidate(candidate, height-1)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get BucketsByCandidate from contractStakingIndexerV2")
+		}
+		for _, b := range btks {
+			if b.isUnstaked() {
+				continue
+			}
+			votes.Add(votes, p.calculateVoteWeight(b, false))
+		}
+	}
+	return votes, nil
 }
 
 func readCandCenterStateFromStateDB(sr protocol.StateReader) (CandidateList, CandidateList, CandidateList, error) {
