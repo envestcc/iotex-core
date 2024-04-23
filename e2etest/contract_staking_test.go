@@ -2011,9 +2011,8 @@ func deployContracts(
 	sk := param.sk
 	bytecode, err := hex.DecodeString(param.bytecode)
 	r.NoError(err)
-	state, err := accountutil.AccountState(genesis.WithGenesisContext(context.Background(), bc.Genesis()), sf, sk.PublicKey().Address())
+	nonce, err := ap.GetPendingNonce(sk.PublicKey().Address().String())
 	r.NoError(err)
-	nonce := state.PendingNonce()
 	amount := param.amount
 	gasLimit := param.gasLimit
 	gasPrice := param.gasPrice
@@ -2024,12 +2023,14 @@ func deployContracts(
 		SetNonce(exec.Nonce()).
 		SetGasLimit(gasLimit).
 		SetGasPrice(gasPrice).
+		SetChainID(uint32(param.chainID)).
 		Build()
 	selp, err := action.Sign(elp, sk)
 	r.NoError(err)
 	err = ap.Add(context.Background(), selp)
 	r.NoError(err)
 	selpHash, err := selp.Hash()
+	r.NoError(err)
 
 	blk, err := bc.MintNewBlock(testutil.TimestampNow())
 	r.NoError(err)
@@ -2040,6 +2041,7 @@ func deployContracts(
 	r.Equal(selpHash, receipt.ActionHash)
 	r.NoError(err)
 	r.NotNil(receipt)
+	r.Equal("", receipt.ExecutionRevertMsg())
 	r.Equal(uint64(iotextypes.ReceiptStatus_Success), receipt.Status)
 
 	return receipt.ContractAddress
@@ -2051,6 +2053,7 @@ type callParam struct {
 	amount       *big.Int
 	gasLimit     uint64
 	gasPrice     *big.Int
+	chainID      uint64
 	sk           crypto.PrivateKey
 }
 
@@ -2065,16 +2068,18 @@ func writeContract(bc blockchain.Blockchain,
 	hashes := []hash.Hash256{}
 	for _, param := range params {
 		nonce := uint64(1)
-		var ok bool
+		// var ok bool
 		sk := param.sk
 		executor := sk.PublicKey().Address()
-		if nonce, ok = nonces[executor.String()]; !ok {
-			state, err := accountutil.AccountState(genesis.WithGenesisContext(context.Background(), bc.Genesis()), sf, executor)
-			r.NoError(err)
-			nonce = state.PendingNonce()
-		} else {
-			nonce++
-		}
+		nonce, err := ap.GetPendingNonce(executor.String())
+		r.NoError(err)
+		// if nonce, ok = nonces[executor.String()]; !ok {
+		// 	state, err := accountutil.AccountState(genesis.WithGenesisContext(context.Background(), bc.Genesis()), sf, executor)
+		// 	r.NoError(err)
+		// 	nonce = state.PendingNonce()
+		// } else {
+		// 	nonce++
+		// }
 		nonces[executor.String()] = nonce
 
 		amount := param.amount
@@ -2109,9 +2114,10 @@ func writeContract(bc blockchain.Blockchain,
 	}
 	receipts := []*action.Receipt{}
 	for _, hash := range hashes {
-		receipt, ok := receiptMap[hash]
-		r.True(ok)
-		receipts = append(receipts, receipt)
+		r.Contains(receiptMap, hash)
+		// receipt, ok := receiptMap[hash]
+		// r.True(ok)
+		receipts = append(receipts, receiptMap[hash])
 	}
 	return receipts, blk
 }
