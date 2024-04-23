@@ -21,22 +21,24 @@ import (
 type (
 	// compositeStakingStateReader is the compositive staking state reader, which combine native and contract staking
 	compositeStakingStateReader struct {
-		contractIndexer ContractStakingIndexer
-		nativeIndexer   *CandidatesBucketsIndexer
-		nativeSR        CandidateStateReader
+		contractIndexer   ContractStakingIndexer
+		contractIndexerV2 ContractStakingIndexerV2
+		nativeIndexer     *CandidatesBucketsIndexer
+		nativeSR          CandidateStateReader
 	}
 )
 
 // newCompositeStakingStateReader creates a new compositive staking state reader
-func newCompositeStakingStateReader(contractIndexer ContractStakingIndexer, nativeIndexer *CandidatesBucketsIndexer, sr protocol.StateReader) (*compositeStakingStateReader, error) {
+func newCompositeStakingStateReader(contractIndexer ContractStakingIndexer, contractIndexerV2 ContractStakingIndexerV2, nativeIndexer *CandidatesBucketsIndexer, sr protocol.StateReader) (*compositeStakingStateReader, error) {
 	nativeSR, err := ConstructBaseView(sr)
 	if err != nil {
 		return nil, err
 	}
 	return &compositeStakingStateReader{
-		contractIndexer: contractIndexer,
-		nativeIndexer:   nativeIndexer,
-		nativeSR:        nativeSR,
+		contractIndexer:   contractIndexer,
+		contractIndexerV2: contractIndexerV2,
+		nativeIndexer:     nativeIndexer,
+		nativeSR:          nativeSR,
 	}, nil
 }
 
@@ -103,6 +105,11 @@ func (c *compositeStakingStateReader) readStateBucketsByVoter(ctx context.Contex
 	if err != nil {
 		return nil, 0, err
 	}
+	nftBucketsV2, err := c.contractIndexerV2.Buckets(height)
+	if err != nil {
+		return nil, 0, err
+	}
+	lsdBuckets = append(lsdBuckets, nftBucketsV2...)
 	lsdBuckets = filterBucketsByVoter(lsdBuckets, req.GetVoterAddress())
 	lsdIoTeXBuckets, err := toIoTeXTypesVoteBucketList(c.nativeSR.SR(), lsdBuckets)
 	if err != nil {

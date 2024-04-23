@@ -123,6 +123,7 @@ func NewProtocol(
 	cfg *BuilderConfig,
 	candBucketsIndexer *CandidatesBucketsIndexer,
 	contractStakingIndexer ContractStakingIndexer,
+	contractStakingIndexerV2 ContractStakingIndexerV2,
 	correctCandsHeight uint64,
 	reviseHeights ...uint64,
 ) (*Protocol, error) {
@@ -164,11 +165,12 @@ func NewProtocol(
 			PersistStakingPatchBlock:         cfg.PersistStakingPatchBlock,
 			EndorsementWithdrawWaitingBlocks: cfg.Staking.EndorsementWithdrawWaitingBlocks,
 		},
-		depositGas:             depositGas,
-		candBucketsIndexer:     candBucketsIndexer,
-		voteReviser:            voteReviser,
-		patch:                  NewPatchStore(cfg.StakingPatchDir),
-		contractStakingIndexer: contractStakingIndexer,
+		depositGas:               depositGas,
+		candBucketsIndexer:       candBucketsIndexer,
+		voteReviser:              voteReviser,
+		patch:                    NewPatchStore(cfg.StakingPatchDir),
+		contractStakingIndexer:   contractStakingIndexer,
+		contractStakingIndexerV2: contractStakingIndexerV2,
 	}, nil
 }
 
@@ -547,7 +549,7 @@ func (p *Protocol) ReadState(ctx context.Context, sr protocol.StateReader, metho
 	}
 
 	// stakeSR is the stake state reader including native and contract staking
-	stakeSR, err := newCompositeStakingStateReader(p.contractStakingIndexer, p.candBucketsIndexer, sr)
+	stakeSR, err := newCompositeStakingStateReader(p.contractStakingIndexer, p.contractStakingIndexerV2, p.candBucketsIndexer, sr)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -557,8 +559,12 @@ func (p *Protocol) ReadState(ctx context.Context, sr protocol.StateReader, metho
 	if err != nil {
 		return nil, 0, err
 	}
-	rp := rolldpos.MustGetProtocol(protocol.MustGetRegistry(ctx))
-	epochStartHeight := rp.GetEpochHeight(rp.GetEpochNum(inputHeight))
+	epochStartHeight := inputHeight
+	rp := rolldpos.FindProtocol(protocol.MustGetRegistry(ctx))
+	if rp != nil {
+		epochStartHeight = rp.GetEpochHeight(rp.GetEpochNum(inputHeight))
+	}
+
 	nativeSR, err := ConstructBaseView(sr)
 	if err != nil {
 		return nil, 0, err

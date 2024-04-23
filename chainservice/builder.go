@@ -47,6 +47,7 @@ import (
 	"github.com/iotexproject/iotex-core/pkg/util/blockutil"
 	"github.com/iotexproject/iotex-core/server/itx/nodestats"
 	"github.com/iotexproject/iotex-core/state/factory"
+	"github.com/iotexproject/iotex-core/systemcontractindex/stakingindex"
 )
 
 // Builder is a builder to build chainservice
@@ -265,7 +266,7 @@ func (builder *Builder) buildBlockDAO(forTest bool) error {
 	// factory is dependent on sgdIndexer and contractStakingIndexer, so it should be put in the first place
 	synchronizedIndexers := []blockdao.BlockIndexer{builder.cs.factory}
 	if builder.cs.contractStakingIndexer != nil {
-		synchronizedIndexers = append(synchronizedIndexers, builder.cs.contractStakingIndexer)
+		synchronizedIndexers = append(synchronizedIndexers, builder.cs.contractStakingIndexer, builder.cs.contractStakingIndexerV2)
 	}
 	if builder.cs.sgdIndexer != nil {
 		synchronizedIndexers = append(synchronizedIndexers, builder.cs.sgdIndexer)
@@ -344,6 +345,24 @@ func (builder *Builder) buildContractStakingIndexer(forTest bool) error {
 		return err
 	}
 	builder.cs.contractStakingIndexer = indexer
+	return nil
+}
+
+func (builder *Builder) buildContractStakingIndexerV2(forTest bool) error {
+	if !builder.cfg.Chain.EnableStakingProtocol {
+		return nil
+	}
+	if builder.cs.contractStakingIndexerV2 != nil {
+		return nil
+	}
+	if forTest || builder.cfg.Genesis.SystemStakingContractV2Address == "" {
+		builder.cs.contractStakingIndexerV2 = nil
+		return nil
+	}
+	dbConfig := builder.cfg.DB
+	dbConfig.DbPath = builder.cfg.Chain.ContractStakingV2IndexDBPath
+	indexer := stakingindex.NewIndexer(db.NewBoltDB(dbConfig), builder.cfg.Genesis.SystemStakingContractV2Address, builder.cfg.Genesis.SystemStakingContractV2Height, builder.cfg.DardanellesUpgrade.BlockInterval)
+	builder.cs.contractStakingIndexerV2 = indexer
 	return nil
 }
 
@@ -569,6 +588,7 @@ func (builder *Builder) registerStakingProtocol() error {
 		},
 		builder.cs.candBucketsIndexer,
 		builder.cs.contractStakingIndexer,
+		builder.cs.contractStakingIndexerV2,
 		builder.cfg.Genesis.OkhotskBlockHeight,
 		builder.cfg.Genesis.GreenlandBlockHeight,
 		builder.cfg.Genesis.HawaiiBlockHeight,
@@ -582,6 +602,9 @@ func (builder *Builder) registerStakingProtocol() error {
 
 func (builder *Builder) registerRewardingProtocol() error {
 	// TODO: rewarding protocol for standalone mode is weird, rDPoSProtocol could be passed via context
+	if builder.cfg.Consensus.Scheme != config.RollDPoSScheme {
+		return nil
+	}
 	return rewarding.NewProtocol(builder.cfg.Genesis.Rewarding).Register(builder.cs.registry)
 }
 
@@ -733,6 +756,9 @@ func (builder *Builder) build(forSubChain, forTest bool) (*ChainService, error) 
 		return nil, err
 	}
 	if err := builder.buildContractStakingIndexer(forTest); err != nil {
+		return nil, err
+	}
+	if err := builder.buildContractStakingIndexerV2(forTest); err != nil {
 		return nil, err
 	}
 	if err := builder.buildBlockDAO(forTest); err != nil {
