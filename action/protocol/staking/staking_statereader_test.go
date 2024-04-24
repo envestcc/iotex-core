@@ -125,7 +125,7 @@ func TestStakingStateReader(t *testing.T) {
 		contractIndexer := NewMockContractStakingIndexer(ctrl)
 		contractIndexer.EXPECT().Buckets(gomock.Any()).Return(testContractBuckets, nil).AnyTimes()
 
-		stakeSR, err := newCompositeStakingStateReader(contractIndexer, nil, sf)
+		stakeSR, err := newCompositeStakingStateReader(contractIndexer, nil, nil, sf)
 		r.NoError(err)
 		r.NotNil(stakeSR)
 

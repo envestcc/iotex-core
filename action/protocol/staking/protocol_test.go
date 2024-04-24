@@ -89,7 +89,7 @@ func TestProtocol(t *testing.T) {
 	stk, err := NewProtocol(nil, &BuilderConfig{
 		Staking:                  genesis.Default.Staking,
 		PersistStakingPatchBlock: math.MaxUint64,
-	}, nil, nil, genesis.Default.GreenlandBlockHeight)
+	}, nil, nil, nil, genesis.Default.GreenlandBlockHeight)
 	r.NotNil(stk)
 	r.NoError(err)
 	buckets, _, err := csr.getAllBuckets()
@@ -202,7 +202,7 @@ func TestCreatePreStates(t *testing.T) {
 	p, err := NewProtocol(nil, &BuilderConfig{
 		Staking:                  genesis.Default.Staking,
 		PersistStakingPatchBlock: math.MaxUint64,
-	}, nil, nil, genesis.Default.GreenlandBlockHeight, genesis.Default.GreenlandBlockHeight)
+	}, nil, nil, nil, genesis.Default.GreenlandBlockHeight, genesis.Default.GreenlandBlockHeight)
 	require.NoError(err)
 	ctx := protocol.WithBlockCtx(
 		genesis.WithGenesisContext(context.Background(), genesis.Default),
@@ -265,7 +265,7 @@ func Test_CreatePreStatesWithRegisterProtocol(t *testing.T) {
 	p, err := NewProtocol(nil, &BuilderConfig{
 		Staking:                  genesis.Default.Staking,
 		PersistStakingPatchBlock: math.MaxUint64,
-	}, cbi, nil, genesis.Default.GreenlandBlockHeight, genesis.Default.GreenlandBlockHeight)
+	}, cbi, nil, nil, genesis.Default.GreenlandBlockHeight, genesis.Default.GreenlandBlockHeight)
 	require.NoError(err)
 
 	rol := rolldpos.NewProtocol(23, 4, 3)
@@ -381,7 +381,7 @@ func Test_CreateGenesisStates(t *testing.T) {
 		p, err := NewProtocol(nil, &BuilderConfig{
 			Staking:                  cfg,
 			PersistStakingPatchBlock: math.MaxUint64,
-		}, nil, nil, genesis.Default.GreenlandBlockHeight)
+		}, nil, nil, nil, genesis.Default.GreenlandBlockHeight)
 		require.NoError(err)
 
 		v, err := p.Start(ctx, sm)
@@ -415,7 +415,7 @@ func TestProtocol_ActiveCandidates(t *testing.T) {
 	p, err := NewProtocol(nil, &BuilderConfig{
 		Staking:                  cfg,
 		PersistStakingPatchBlock: math.MaxUint64,
-	}, nil, csIndexer, genesis.Default.GreenlandBlockHeight)
+	}, nil, csIndexer, nil, genesis.Default.GreenlandBlockHeight)
 	require.NoError(err)
 
 	blkHeight := genesis.Default.QuebecBlockHeight + 1

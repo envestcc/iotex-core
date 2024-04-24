@@ -122,6 +122,7 @@ func TestVoteReviser(t *testing.T) {
 		},
 		nil,
 		nil,
+		nil,
 		genesis.Default.OkhotskBlockHeight,
 		genesis.Default.HawaiiBlockHeight,
 		genesis.Default.GreenlandBlockHeight,
