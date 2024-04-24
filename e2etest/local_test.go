@@ -335,6 +335,8 @@ func TestLocalSync(t *testing.T) {
 	require.NoError(err)
 	contractIndexDBPath, err := testutil.PathOfTempFile(_dBPath)
 	require.NoError(err)
+	contractIndexV2DBPath, err := testutil.PathOfTempFile(_dBPath + "_v2")
+	require.NoError(err)
 	indexSGDDBPath, err := testutil.PathOfTempFile(_dBPath + "_sgd")
 	require.NoError(err)
 	cfg.Chain.TrieDBPatchFile = ""
@@ -342,6 +344,7 @@ func TestLocalSync(t *testing.T) {
 	cfg.Chain.ChainDBPath = testDBPath
 	cfg.Chain.IndexDBPath = indexDBPath
 	cfg.Chain.ContractStakingIndexDBPath = contractIndexDBPath
+	cfg.Chain.ContractStakingV2IndexDBPath = contractIndexV2DBPath
 	cfg.Chain.SGDIndexDBPath = indexSGDDBPath
 	defer func() {
 		testutil.CleanupPath(testTriePath)
@@ -349,6 +352,7 @@ func TestLocalSync(t *testing.T) {
 		testutil.CleanupPath(indexDBPath)
 		testutil.CleanupPath(contractIndexDBPath)
 		testutil.CleanupPath(indexSGDDBPath)
+		testutil.CleanupPath(contractIndexV2DBPath)
 	}()
 
 	// bootnode

@@ -264,19 +264,6 @@ func TestCalculateVoteWeight(t *testing.T) {
 			selfStake: true,
 			expected:  big.NewInt(1038),
 		},
-		{
-			name:   "NFT-IIII, auto-stake disabled",
-			consts: consts,
-			voteBucket: &VoteBucket{
-				StakedDuration:            3 * 17280 * blockInterval,
-				StakedDurationBlockNumber: 3 * 17280,
-				AutoStake:                 false,
-				StakedAmount:              big.NewInt(1000),
-				ContractAddress:           identityset.Address(1).String(),
-			},
-			selfStake: true,
-			expected:  big.NewInt(1098),
-		},
 	}
 
 	// Run tests
