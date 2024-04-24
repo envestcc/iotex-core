@@ -518,7 +518,7 @@ func (p *Protocol) ActiveCandidates(ctx context.Context, sr protocol.StateReader
 	list := c.AllCandidates()
 	cand := make(CandidateList, 0, len(list))
 	for i := range list {
-		csVotes, err := p.contractStakingVotes(ctx, list[i].Owner, srHeight-1)
+		csVotes, err := p.contractStakingVotes(ctx, list[i].Owner, srHeight)
 		if err != nil {
 			return nil, err
 		}
