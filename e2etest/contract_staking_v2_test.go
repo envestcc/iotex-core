@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/mohae/deepcopy"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -1269,6 +1270,22 @@ func TestContractStakingV2(t *testing.T) {
 			}
 			return nil, nil
 		}
+		candidateByName = func(name string, height uint64) (*state.Candidate, error) {
+			cand, err := readCandidateStateByName(cs, name)
+			if err != nil {
+				return nil, err
+			}
+			votes, ok := big.NewInt(0).SetString(cand.TotalWeightedVotes, 10)
+			if !ok {
+				return nil, errors.New("failed to convert votes to big.Int")
+			}
+			return &state.Candidate{
+				Address:       cand.OperatorAddress,
+				CanName:       []byte(cand.Name),
+				Votes:         votes,
+				RewardAddress: cand.RewardAddress,
+			}, nil
+		}
 
 		jumpBlocks(bc, int(cfg.Genesis.TsunamiBlockHeight), require)
 		// deploy contract
@@ -2055,6 +2072,34 @@ func readCandidateStateByAddress(cs api.CoreService, owner address.Address) (*io
 		Request: &iotexapi.ReadStakingDataRequest_CandidateByAddress_{
 			CandidateByAddress: &iotexapi.ReadStakingDataRequest_CandidateByAddress{
 				OwnerAddr: owner.String(),
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := cs.ReadState("staking", "", methodName, [][]byte{arg})
+	if err != nil {
+		return nil, err
+	}
+	cand := &iotextypes.CandidateV2{}
+	if err = proto.Unmarshal(resp.GetData(), cand); err != nil {
+		return nil, err
+	}
+	return cand, nil
+}
+
+func readCandidateStateByName(cs api.CoreService, name string) (*iotextypes.CandidateV2, error) {
+	methodName, err := proto.Marshal(&iotexapi.ReadStakingDataMethod{
+		Method: iotexapi.ReadStakingDataMethod_CANDIDATE_BY_NAME,
+	})
+	if err != nil {
+		return nil, err
+	}
+	arg, err := proto.Marshal(&iotexapi.ReadStakingDataRequest{
+		Request: &iotexapi.ReadStakingDataRequest_CandidateByName_{
+			CandidateByName: &iotexapi.ReadStakingDataRequest_CandidateByName{
+				CandName: name,
 			},
 		},
 	})
