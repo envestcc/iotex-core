@@ -80,8 +80,8 @@ type (
 		depositGas               DepositGas
 		config                   Configuration
 		candBucketsIndexer       *CandidatesBucketsIndexer
-		contractStakingIndexer   ContractStakingIndexer
-		contractStakingIndexerV2 ContractStakingIndexerV2
+		contractStakingIndexer   ContractStakingIndexerWithBucketType
+		contractStakingIndexerV2 ContractStakingIndexer
 		voteReviser              *VoteReviser
 		patch                    *PatchStore
 	}
@@ -122,8 +122,8 @@ func NewProtocol(
 	depositGas DepositGas,
 	cfg *BuilderConfig,
 	candBucketsIndexer *CandidatesBucketsIndexer,
-	contractStakingIndexer ContractStakingIndexer,
-	contractStakingIndexerV2 ContractStakingIndexerV2,
+	contractStakingIndexer ContractStakingIndexerWithBucketType,
+	contractStakingIndexerV2 ContractStakingIndexer,
 	correctCandsHeight uint64,
 	reviseHeights ...uint64,
 ) (*Protocol, error) {
@@ -549,7 +549,7 @@ func (p *Protocol) ReadState(ctx context.Context, sr protocol.StateReader, metho
 	}
 
 	// stakeSR is the stake state reader including native and contract staking
-	stakeSR, err := newCompositeStakingStateReader(p.contractStakingIndexer, p.contractStakingIndexerV2, p.candBucketsIndexer, sr)
+	stakeSR, err := newCompositeStakingStateReader(p.candBucketsIndexer, sr, p.calculateVoteWeight, p.contractStakingIndexer, p.contractStakingIndexerV2)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -700,11 +700,16 @@ func (p *Protocol) contractStakingVotes(ctx context.Context, candidate address.A
 		// specifying the height param instead of query latest from indexer directly, aims to cause error when indexer falls behind
 		// currently there are two possible sr (i.e. factory or workingSet), it means the height could be chain height or current block height
 		// using height-1 will cover the two scenario while detect whether the indexer is lagging behind
-		contractVotes, err := p.contractStakingIndexer.CandidateVotes(ctx, candidate, height-1)
+		btks, err := p.contractStakingIndexer.BucketsByCandidate(candidate, height-1)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get CandidateVotes from contractStakingIndexer")
+			return nil, errors.Wrap(err, "failed to get BucketsByCandidate from contractStakingIndexer")
 		}
-		votes.Add(votes, contractVotes)
+		for _, b := range btks {
+			if b.isUnstaked() {
+				continue
+			}
+			votes.Add(votes, p.calculateVoteWeight(b, false))
+		}
 	}
 	if p.contractStakingIndexerV2 != nil && !featureCtx.UseContractStakingV1 {
 		btks, err := p.contractStakingIndexerV2.BucketsByCandidate(candidate, height-1)

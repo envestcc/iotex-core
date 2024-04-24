@@ -162,7 +162,7 @@ mkdir -p ./action/protocol/staking
 mockgen -destination=./action/protocol/staking/contractstake_indexer_mock.go  \
         -source=./action/protocol/staking/contractstake_indexer.go \
         -package=staking \
-        ContractStakingIndexer
+        ContractStakingIndexer ContractStakingIndexerWithBucketType
 
 mkdir -p ./test/mock/mock_blockdao
 mockgen -destination=./test/mock/mock_blockdao/mock_blockindexer.go  \
