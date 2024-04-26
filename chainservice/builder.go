@@ -295,7 +295,7 @@ func (builder *Builder) buildBlockDAO(forTest bool) error {
 	if err != nil {
 		return err
 	}
-	builder.cs.blockdao = blockdao.NewBlockDAOWithIndexersAndCache(store, indexers, builder.cfg.DB.MaxCacheSize)
+	builder.cs.blockdao = blockdao.NewHardStopBlockDAO(store, indexers, builder.cfg.DB.MaxCacheSize, builder.cfg.DB.HardStopHeight)
 
 	return nil
 }
