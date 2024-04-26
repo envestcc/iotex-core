@@ -94,6 +94,15 @@ build-actioninjector:
 build-addrgen:
 	$(GOBUILD) -o ./bin/$(BUILD_TARGET_ADDRGEN) -v ./tools/addrgen
 
+.PHONY: build-snapshotgen
+build-snapshotgen:
+	$(GOBUILD) -o ./bin/snapshotgen -v ./tools/snapshotgen
+
+.PHONY: build-testbin
+build-testbin:
+	$(GOBUILD) -o ./bin/testbin -v ./tools/testbin
+
+
 .PHONY: build-minicluster
 build-minicluster:
 	$(GOBUILD) -o ./bin/$(BUILD_TARGET_MINICLUSTER) -v ./tools/minicluster

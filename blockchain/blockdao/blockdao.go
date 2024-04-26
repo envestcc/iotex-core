@@ -63,6 +63,7 @@ type (
 		bodyCache    cache.LRUCache
 		footerCache  cache.LRUCache
 		tipHeight    uint64
+		stopHeight   uint64
 	}
 )
 
@@ -100,6 +101,12 @@ func NewBlockDAOWithIndexersAndCache(blkStore BlockDAO, indexers []BlockIndexer,
 	return blockDAO
 }
 
+func NewHardStopBlockDAO(blkStore BlockDAO, indexers []BlockIndexer, cacheSize int, stopHeight uint64) BlockDAO {
+	blockDAO := NewBlockDAOWithIndexersAndCache(blkStore, indexers, cacheSize).(*blockDAO)
+	blockDAO.stopHeight = stopHeight
+	return blockDAO
+}
+
 // Start starts block DAO and initiates the top height if it doesn't exist
 func (dao *blockDAO) Start(ctx context.Context) error {
 	err := dao.lifecycle.OnStart(ctx)
@@ -112,13 +119,19 @@ func (dao *blockDAO) Start(ctx context.Context) error {
 		return err
 	}
 	atomic.StoreUint64(&dao.tipHeight, tipHeight)
-	return dao.checkIndexers(ctx)
+	if err = dao.checkIndexers(ctx); err != nil {
+		return err
+	}
+	if dao.stopHeight > 0 && tipHeight > dao.stopHeight {
+		log.L().Panic("tip height is greater than stop height", zap.Uint64("tipHeight", tipHeight), zap.Uint64("stopHeight", dao.stopHeight))
+	}
+	return nil
 }
 
 func (dao *blockDAO) checkIndexers(ctx context.Context) error {
 	checker := NewBlockIndexerChecker(dao)
 	for i, indexer := range dao.indexers {
-		if err := checker.CheckIndexer(ctx, indexer, 0, func(height uint64) {
+		if err := checker.CheckIndexer(ctx, indexer, dao.stopHeight, func(height uint64) {
 			if height%5000 == 0 {
 				log.L().Info(
 					"indexer is catching up.",
@@ -232,6 +245,9 @@ func (dao *blockDAO) TransactionLogs(height uint64) (*iotextypes.TransactionLogs
 }
 
 func (dao *blockDAO) PutBlock(ctx context.Context, blk *block.Block) error {
+	if dao.stopHeight > 0 && blk.Height() > dao.stopHeight {
+		log.L().Panic("block height is greater than stop height", zap.Uint64("blockHeight", blk.Height()), zap.Uint64("stopHeight", dao.stopHeight))
+	}
 	timer := dao.timerFactory.NewTimer("put_block")
 	if err := dao.blockStore.PutBlock(ctx, blk); err != nil {
 		timer.End()
