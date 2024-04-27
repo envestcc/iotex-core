@@ -13,14 +13,14 @@ network:
 chain:
   # If you are a delegate, make sure producerPrivKey is the key for the operator address you have registered.
   # producerPrivKey: SET YOUR PRIVATE KEY HERE (e.g., 96f0aa5e8523d6a28dc35c927274be4e931e74eaa720b418735debfcbfe712b8)
-  chainDBPath: "/Users/chenchen/iotex-var/archive/data/chain.db"
-  trieDBPath: "/Users/chenchen/iotex-var/archive/data/trie.db"
-  trieDBPatchFile: "/Users/chenchen/iotex-var/archive/data/trie.db.patch"
-  indexDBPath: "/Users/chenchen/iotex-var/archive/data/index.db"
-  bloomfilterIndexDBPath: "/Users/chenchen/iotex-var/archive/data/bloomfilter.index.db"
-  candidateIndexDBPath: "/Users/chenchen/iotex-var/archive/data/candidate.index.db"
-  stakingIndexDBPath: "/Users/chenchen/iotex-var/archive/data/staking.index.db"
-  contractStakingIndexDBPath: "/Users/chenchen/iotex-var/archive/data/contractstaking.index.db"
+  chainDBPath: "{{.DataPath}}/data/chain.db"
+  trieDBPath: "{{.DataPath}}/data/trie.db"
+  trieDBPatchFile: "{{.DataPath}}/data/trie.db.patch"
+  indexDBPath: "{{.DataPath}}/data/index.db"
+  bloomfilterIndexDBPath: "{{.DataPath}}/data/bloomfilter.index.db"
+  candidateIndexDBPath: "{{.DataPath}}/data/candidate.index.db"
+  stakingIndexDBPath: "{{.DataPath}}/data/staking.index.db"
+  contractStakingIndexDBPath: "{{.DataPath}}/data/contractstaking.index.db"
   maxCacheSize: 1000
   enableTrielessStateDB: false
   enableArchiveMode: false
@@ -32,7 +32,7 @@ chain:
     paginationSize: 255
     cacheSize: 1000
   gravityChainDB:
-    dbPath: "/Users/chenchen/iotex-var/archive/data/poll.db"
+    dbPath: "{{.DataPath}}/data/poll.db"
     numRetries: 8
 
 actPool:
@@ -52,7 +52,7 @@ consensus:
       acceptProposalEndorsementTTL: 2s
       acceptLockEndorsementTTL: 2s
     delay: 10s
-    consensusDBPath: "/Users/chenchen/iotex-var/archive/data/consensus.db"
+    consensusDBPath: "{{.DataPath}}/data/consensus.db"
 
 blockSync:
   interval: 10s
@@ -67,7 +67,7 @@ log:
     disableStacktrace: true
     outputPaths: ["stderr", "stdout"]
     errorOutputPaths: ["stderr"]
-  stderrRedirectFile: /Users/chenchen/iotex-var/archive/log/s.log
+  stderrRedirectFile: {{.DataPath}}/log/s.log
   stdLogRedirect: true
 
 nodeinfo:

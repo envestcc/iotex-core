@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"flag"
 	"fmt"
 	"html/template"
 	"os"
@@ -15,11 +16,12 @@ import (
 )
 
 var (
-	nodeBinaryPath          = "/Users/chenchen/dev/iotex-core/bin/server"
-	archiveSnapshotCapacity = 1000000                                 // historical blocks to keep in snapshot
-	archiveSnapshotReserve  = 256                                     // blocks to keep in before snapshot
-	snapshotIndexStart      = 1                                       // start index of snapshot
-	backupRoot              = "/Users/chenchen/dev/iotex-core/backup" // backup folder
+	nodeBinaryPath          string
+	nodeDataPath            string
+	archiveSnapshotCapacity = 1000000 // historical blocks to keep in snapshot
+	archiveSnapshotReserve  = 256     // blocks to keep in before snapshot
+	snapshotIndexStart      = 1       // start index of snapshot
+	backupRoot              string    // backup folder
 
 	//go:embed config-snapshot.tmpl
 	configTmpl string
@@ -29,9 +31,19 @@ var (
 
 type SnapshotConfig struct {
 	StopHeight uint64
+	DataPath   string
+}
+
+func initParams() {
+	flag.StringVar(&nodeBinaryPath, "node-binary", "./bin/server", "path to iotex-core binary")
+	flag.StringVar(&nodeDataPath, "data", "./archive/data", "path to iotex-core data folder")
+	flag.IntVar(&snapshotIndexStart, "start", 0, "start index of snapshot")
+	flag.StringVar(&backupRoot, "backup", "./backup", "root folder to store backup")
+	flag.Parse()
 }
 
 func main() {
+	initParams()
 	// TODO: read state height to determine the start index of snapshot
 
 	for i := snapshotIndexStart; ; i++ {
@@ -78,7 +90,7 @@ func genSnapshotConfig(index int) (string, string, error) {
 		return "", "", err
 	}
 	defer file.Close()
-	err = t.Execute(file, SnapshotConfig{StopHeight: snapshotStopHeight(index)})
+	err = t.Execute(file, SnapshotConfig{StopHeight: snapshotStopHeight(index), DataPath: nodeDataPath})
 	if err != nil {
 		return "", "", err
 	}
