@@ -121,7 +121,7 @@ func snapshotStopHeight(index int) uint64 {
 
 func copySnapshot(index int) {
 	log.L().Info("Copying snapshot", zap.Int("index", index))
-	files := []string{"/Users/chenchen/iotex-var/archive/data/trie.db"}
+	files := []string{"trie.db"}
 	folder := fmt.Sprintf("%s/snapshot-%d/", backupRoot, index)
 	// create backup folder
 	cmd := exec.Command("mkdir", "-p", folder)
@@ -130,8 +130,8 @@ func copySnapshot(index int) {
 	fmt.Println(err)
 	// copy files to backup folder
 	for _, file := range files {
-		path.Base(file)
-		cmd := exec.Command("cp", file, folder)
+		filePath := path.Join(nodeDataPath, "data", file)
+		cmd := exec.Command("cp", filePath, folder)
 		output, err := cmd.Output()
 		fmt.Println(string(output))
 		fmt.Println(err)
