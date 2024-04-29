@@ -108,11 +108,11 @@ func genSnapshotConfig(index int) (string, string, error) {
 }
 
 func snapshotStartHeight(index int) uint64 {
-	start := uint64(index*archiveSnapshotCapacity - archiveSnapshotReserve)
-	if start < 0 {
-		return 0
+	start := index*archiveSnapshotCapacity - archiveSnapshotReserve
+	if start <= 0 {
+		return 1
 	}
-	return start
+	return uint64(start)
 }
 
 func snapshotStopHeight(index int) uint64 {
