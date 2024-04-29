@@ -60,12 +60,25 @@ func (bic *BlockIndexerChecker) CheckIndexer(ctx context.Context, indexer BlockI
 	if err != nil {
 		return err
 	}
+	log.L().Info("checking indexer", zap.Uint64("tipHeight", tipHeight), zap.Uint64("targetHeight", targetHeight))
 	daoTip, err := bic.dao.Height()
 	if err != nil {
 		return err
 	}
 	if tipHeight > daoTip {
 		return errors.New("indexer tip height cannot by higher than dao tip height")
+	}
+	if targetHeight != 0 && targetHeight < tipHeight {
+		return errors.New("target height cannot be lower than indexer tip height")
+	}
+	if ig, ok := indexer.(interface{ MaxHeight() (uint64, error) }); ok {
+		maxHeight, err := ig.MaxHeight()
+		if err != nil {
+			return err
+		}
+		if targetHeight != 0 && targetHeight < maxHeight {
+			return errors.New("target height cannot be lower than indexer tip height")
+		}
 	}
 	tipBlk, err := bic.dao.GetBlockByHeight(tipHeight)
 	if err != nil {
