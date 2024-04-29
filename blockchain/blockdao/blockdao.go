@@ -7,6 +7,7 @@ package blockdao
 
 import (
 	"context"
+	"os"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
@@ -123,7 +124,8 @@ func (dao *blockDAO) Start(ctx context.Context) error {
 		return err
 	}
 	if dao.stopHeight > 0 && tipHeight > dao.stopHeight {
-		log.L().Panic("tip height is greater than stop height", zap.Uint64("tipHeight", tipHeight), zap.Uint64("stopHeight", dao.stopHeight))
+		log.L().Info("tip height is greater than stop height", zap.Uint64("tipHeight", tipHeight), zap.Uint64("stopHeight", dao.stopHeight))
+		os.Exit(0)
 	}
 	return nil
 }
@@ -246,7 +248,8 @@ func (dao *blockDAO) TransactionLogs(height uint64) (*iotextypes.TransactionLogs
 
 func (dao *blockDAO) PutBlock(ctx context.Context, blk *block.Block) error {
 	if dao.stopHeight > 0 && blk.Height() > dao.stopHeight {
-		log.L().Panic("block height is greater than stop height", zap.Uint64("blockHeight", blk.Height()), zap.Uint64("stopHeight", dao.stopHeight))
+		log.L().Info("block height is greater than stop height", zap.Uint64("blockHeight", blk.Height()), zap.Uint64("stopHeight", dao.stopHeight))
+		os.Exit(0)
 	}
 	timer := dao.timerFactory.NewTimer("put_block")
 	if err := dao.blockStore.PutBlock(ctx, blk); err != nil {

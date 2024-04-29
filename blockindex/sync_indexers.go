@@ -99,6 +99,20 @@ func (ig *SyncIndexers) Height() (uint64, error) {
 	return height, nil
 }
 
+func (ig *SyncIndexers) MaxHeight() (uint64, error) {
+	var height uint64
+	for i, indexer := range ig.indexers {
+		h, err := indexer.Height()
+		if err != nil {
+			return 0, err
+		}
+		if i == 0 || h > height {
+			height = h
+		}
+	}
+	return height, nil
+}
+
 // initStartHeight initializes the start height of the indexers in the group
 // for every indexer, the start height is the maximum of tipheight+1 and startheight
 func (ig *SyncIndexers) initStartHeight() error {

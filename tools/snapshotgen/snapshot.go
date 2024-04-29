@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -45,16 +46,22 @@ func initParams() {
 func main() {
 	initParams()
 	// TODO: read state height to determine the start index of snapshot
-
+	wg := sync.WaitGroup{}
 	for i := snapshotIndexStart; ; i++ {
 		if err := genSnapshot(i); err != nil {
 			log.L().Error("Failed to generate snapshot", zap.Int("index", i), zap.Error(err))
 			break
 		}
 		copySnapshot(i)
-		go backupSnapshot(i)
+		wg.Add(1)
+		go func(id int) {
+			backupSnapshot(id)
+			wg.Done()
+		}(i)
 		time.Sleep(time.Second)
 	}
+	log.L().Info("waiting for backup to finish")
+	wg.Wait()
 }
 
 func genSnapshot(index int) error {
@@ -69,10 +76,12 @@ func genSnapshot(index int) error {
 	log.L().Info("cmd", zap.String("cmd", cmd.String()))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	if err = cmd.Run(); err != nil {
+		return err
+	}
 	// output, err := cmd.Output()
 	// fmt.Println(string(output))
-	fmt.Println(err)
+	// fmt.Println(err)
 	// TODO: check if snapshot is generated successfully
 	return nil
 }
@@ -90,7 +99,7 @@ func genSnapshotConfig(index int) (string, string, error) {
 		return "", "", err
 	}
 	defer file.Close()
-	err = t.Execute(file, SnapshotConfig{StopHeight: snapshotStartHeight(index), DataPath: nodeDataPath})
+	err = t.Execute(file, SnapshotConfig{StopHeight: snapshotHeight(index), DataPath: nodeDataPath})
 	if err != nil {
 		return "", "", err
 	}
@@ -107,7 +116,7 @@ func genSnapshotConfig(index int) (string, string, error) {
 	return configPath, genesisPath, nil
 }
 
-func snapshotStartHeight(index int) uint64 {
+func snapshotHeight(index int) uint64 {
 	start := index*archiveSnapshotCapacity - archiveSnapshotReserve
 	if start <= 0 {
 		return 1
@@ -115,12 +124,12 @@ func snapshotStartHeight(index int) uint64 {
 	return uint64(start)
 }
 
-func snapshotStopHeight(index int) uint64 {
-	return uint64((index + 1) * archiveSnapshotCapacity)
-}
+// func snapshotStopHeight(index int) uint64 {
+// 	return uint64((index + 1) * archiveSnapshotCapacity)
+// }
 
 func snapshotFolder(index int) string {
-	return fmt.Sprintf("%s/snapshots/shard-%03d", backupRoot, index)
+	return fmt.Sprintf("%s/factory-snapshots/%d", backupRoot, snapshotHeight(index))
 }
 
 func copySnapshot(index int) {
