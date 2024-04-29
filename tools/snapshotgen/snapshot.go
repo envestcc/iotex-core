@@ -37,7 +37,7 @@ type SnapshotConfig struct {
 func initParams() {
 	flag.StringVar(&nodeBinaryPath, "node-binary", "./bin/server", "path to iotex-core binary")
 	flag.StringVar(&nodeDataPath, "data", "./archive/data", "path to iotex-core data folder")
-	flag.IntVar(&snapshotIndexStart, "start", 0, "start index of snapshot")
+	flag.IntVar(&snapshotIndexStart, "start", 1, "start index of snapshot")
 	flag.StringVar(&backupRoot, "backup", "./backup", "root folder to store backup")
 	flag.Parse()
 }
@@ -90,7 +90,7 @@ func genSnapshotConfig(index int) (string, string, error) {
 		return "", "", err
 	}
 	defer file.Close()
-	err = t.Execute(file, SnapshotConfig{StopHeight: snapshotStopHeight(index), DataPath: nodeDataPath})
+	err = t.Execute(file, SnapshotConfig{StopHeight: snapshotStartHeight(index), DataPath: nodeDataPath})
 	if err != nil {
 		return "", "", err
 	}
@@ -100,7 +100,7 @@ func genSnapshotConfig(index int) (string, string, error) {
 		return "", "", err
 	}
 	defer file2.Close()
-	err = t2.Execute(file2, SnapshotConfig{StopHeight: snapshotStopHeight(index)})
+	err = t2.Execute(file2, SnapshotConfig{})
 	if err != nil {
 		return "", "", err
 	}
@@ -119,10 +119,14 @@ func snapshotStopHeight(index int) uint64 {
 	return uint64((index + 1) * archiveSnapshotCapacity)
 }
 
+func snapshotFolder(index int) string {
+	return fmt.Sprintf("%s/snapshots/shard-%03d", backupRoot, index)
+}
+
 func copySnapshot(index int) {
 	log.L().Info("Copying snapshot", zap.Int("index", index))
 	files := []string{"trie.db"}
-	folder := fmt.Sprintf("%s/snapshot-%d/", backupRoot, index)
+	folder := snapshotFolder(index)
 	// create backup folder
 	cmd := exec.Command("mkdir", "-p", folder)
 	output, err := cmd.Output()
@@ -141,4 +145,5 @@ func copySnapshot(index int) {
 func backupSnapshot(index int) {
 	// TODO: backup snapshot to remote storage
 	log.L().Info("Backing up snapshot async", zap.Int("index", index))
+	// exec.Command("gstuil", "cp", "-r",  , "gs://iotex-snapshot")
 }
