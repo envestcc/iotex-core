@@ -99,6 +99,8 @@ func main() {
 		dbFilePaths = append(dbFilePaths, systemLogDBPath)
 		candidateIndexDBPath := fmt.Sprintf("./candidate.index%d.db", i+1)
 		dbFilePaths = append(dbFilePaths, candidateIndexDBPath)
+		contractStakingIndexDBPath := fmt.Sprintf("./contractstaking.index%d.db", i+1)
+		dbFilePaths = append(dbFilePaths, contractStakingIndexDBPath)
 		networkPort := config.Default.Network.Port + i
 		apiPort := config.Default.API.GRPCPort + i
 		web3APIPort := config.Default.API.HTTPPort + i
@@ -111,6 +113,7 @@ func main() {
 		config.Chain.IndexDBPath = indexDBPath
 		config.Chain.BloomfilterIndexDBPath = bloomfilterIndexDBPath
 		config.Chain.CandidateIndexDBPath = candidateIndexDBPath
+		config.Chain.ContractStakingIndexDBPath = contractStakingIndexDBPath
 		config.Consensus.RollDPoS.ConsensusDBPath = consensusDBPath
 		config.System.SystemLogDBPath = systemLogDBPath
 		if i == 0 {
@@ -148,11 +151,11 @@ func main() {
 		defer cancel()
 		go itx.StartServer(ctx, svrs[i], probe.New(7788+i), configs[i])
 	}
-
+	time.Sleep(10 * time.Second)
 	// target address for grpc connection. Default is "127.0.0.1:14014"
 	grpcAddr := "127.0.0.1:14014"
 
-	grpcctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	grpcctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	conn, err := grpc.DialContext(grpcctx, grpcAddr, grpc.WithBlock(), grpc.WithInsecure())
 	if err != nil {
