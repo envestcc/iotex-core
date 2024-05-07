@@ -24,6 +24,8 @@ var (
 	snapshotIndexStart      = 1       // start index of snapshot
 	backupRoot              string    // backup folder
 
+	gogc = 100
+
 	//go:embed config-snapshot.tmpl
 	configTmpl string
 	//go:embed genesis-snapshot.tmpl
@@ -40,6 +42,7 @@ func initParams() {
 	flag.StringVar(&nodeDataPath, "data", "./archive/data", "path to iotex-core data folder")
 	flag.IntVar(&snapshotIndexStart, "start", 1, "start index of snapshot")
 	flag.StringVar(&backupRoot, "backup", "./backup", "root folder to store backup")
+	flag.IntVar(&gogc, "gogc", 100, "value of GOGC")
 	flag.Parse()
 }
 
@@ -73,7 +76,8 @@ func genSnapshot(index int) error {
 	}
 	// run node to generate snapshot
 	cmd := exec.Command(nodeBinaryPath, "-config-path="+configPath, "-genesis-path="+genesisPath)
-	log.L().Info("cmd", zap.String("cmd", cmd.String()))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GOGC=%d", gogc))
+	log.L().Info("cmd", zap.String("cmd", cmd.String()), zap.Strings("env", cmd.Env))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err = cmd.Run(); err != nil {
