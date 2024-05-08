@@ -23,8 +23,8 @@ chain:
   contractStakingIndexDBPath: "{{.DataPath}}/data/contractstaking.index.db"
   maxCacheSize: 1000
   enableTrielessStateDB: false
-  enableArchiveMode: false
-  enablePebbleDB: true
+  enableArchiveMode: {{.EnableArchiveMode}}
+  enablePebbleDB: {{.EnablePebbleDB}}
   committee:
     gravityChainAPIs:
       # please change the infura key to your key (e.g., https://mainnet.infura.io/v3/YOUR_KEY)

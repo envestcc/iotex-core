@@ -23,6 +23,8 @@ var (
 	archiveSnapshotReserve  = 256     // blocks to keep in before snapshot
 	snapshotIndexStart      = 1       // start index of snapshot
 	backupRoot              string    // backup folder
+	enableArchiveMode       = false
+	enablePebbleDB          = false
 
 	gogc = 100
 
@@ -33,8 +35,10 @@ var (
 )
 
 type SnapshotConfig struct {
-	StopHeight uint64
-	DataPath   string
+	StopHeight        uint64
+	DataPath          string
+	EnablePebbleDB    bool
+	EnableArchiveMode bool
 }
 
 func initParams() {
@@ -43,6 +47,8 @@ func initParams() {
 	flag.IntVar(&snapshotIndexStart, "start", 1, "start index of snapshot")
 	flag.StringVar(&backupRoot, "backup", "./backup", "root folder to store backup")
 	flag.IntVar(&gogc, "gogc", 100, "value of GOGC")
+	flag.BoolVar(&enableArchiveMode, "archive", false, "enable archive mode")
+	flag.BoolVar(&enablePebbleDB, "pebble", false, "enable pebble db")
 	flag.Parse()
 }
 
@@ -103,7 +109,12 @@ func genSnapshotConfig(index int) (string, string, error) {
 		return "", "", err
 	}
 	defer file.Close()
-	err = t.Execute(file, SnapshotConfig{StopHeight: snapshotHeight(index), DataPath: nodeDataPath})
+	err = t.Execute(file, SnapshotConfig{
+		StopHeight:        snapshotHeight(index),
+		DataPath:          nodeDataPath,
+		EnablePebbleDB:    enablePebbleDB,
+		EnableArchiveMode: enableArchiveMode,
+	})
 	if err != nil {
 		return "", "", err
 	}
@@ -148,7 +159,7 @@ func copySnapshot(index int) {
 	// copy files to backup folder
 	for _, file := range files {
 		filePath := path.Join(nodeDataPath, "data", file)
-		cmd := exec.Command("cp", filePath, folder)
+		cmd := exec.Command("cp", "-R", filePath, folder)
 		output, err := cmd.Output()
 		fmt.Println(string(output))
 		fmt.Println(err)
