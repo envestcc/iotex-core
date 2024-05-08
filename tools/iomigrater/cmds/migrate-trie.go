@@ -8,7 +8,13 @@ import (
 	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
 
+	"github.com/iotexproject/go-pkgs/hash"
+
 	"github.com/iotexproject/iotex-core/tools/iomigrater/common"
+)
+
+const (
+	prefixLength = 8
 )
 
 // Multi-language support
@@ -90,8 +96,9 @@ func migrateTrieFile() (err error) {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
-				keys = append(keys, append(name, k...))
-				if err := batch.Set(append(name, k...), v, nil); err != nil {
+				pebbleKey := nsKey(string(name), k)
+				keys = append(keys, pebbleKey)
+				if err := batch.Set(pebbleKey, v, nil); err != nil {
 					return err
 				}
 				if batch.Count() >= uint32(size) {
@@ -126,4 +133,14 @@ func migrateTrieFile() (err error) {
 		return err
 	}
 	return nil
+}
+
+func nsKey(ns string, key []byte) []byte {
+	nk := nsToPrefix(ns)
+	return append(nk, key...)
+}
+
+func nsToPrefix(ns string) []byte {
+	h := hash.Hash160b([]byte(ns))
+	return h[:prefixLength]
 }
