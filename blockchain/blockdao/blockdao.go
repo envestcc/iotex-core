@@ -113,7 +113,7 @@ func (dao *blockDAO) Start(ctx context.Context) error {
 		return err
 	}
 	atomic.StoreUint64(&dao.tipHeight, tipHeight)
-	return dao.checkIndexers(ctx)
+	return nil
 }
 
 func (dao *blockDAO) checkIndexers(ctx context.Context) error {
@@ -126,6 +126,10 @@ func (dao *blockDAO) checkIndexers(ctx context.Context) error {
 					zap.Int("indexer", i),
 					zap.Uint64("height", height),
 				)
+			}
+			var stopHeight uint64 = 21000300
+			if height > stopHeight {
+				panic(stopHeight)
 			}
 		}); err != nil {
 			return err
