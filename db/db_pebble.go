@@ -61,7 +61,8 @@ func (b *PebbleDB) Start(_ context.Context) error {
 		return prefixLength
 	}
 	db, err := pebble.Open(b.path, &pebble.Options{
-		Comparer: comparer,
+		Comparer:           comparer,
+		FormatMajorVersion: pebble.FormatPrePebblev1MarkedCompacted,
 	})
 	if err != nil {
 		return errors.Wrap(ErrIO, err.Error())
