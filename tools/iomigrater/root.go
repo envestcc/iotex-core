@@ -48,6 +48,7 @@ func init() {
 	RootCmd.AddCommand(cmd.CheckHeight)
 	RootCmd.AddCommand(cmd.MigrateDb)
 	RootCmd.AddCommand(cmd.CompactPebbleDB)
+	RootCmd.AddCommand(cmd.StateDB2Factory)
 
 	RootCmd.HelpFunc()
 }
