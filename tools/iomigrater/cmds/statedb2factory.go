@@ -98,6 +98,9 @@ func statedb2Factory() (err error) {
 		return errors.Wrap(err, "failed to start db for trie")
 	}
 	tlt := mptrie.NewTwoLayerTrie(dbForTrie, nil, factory.ArchiveTrieRootKey)
+	if err = tlt.Start(context.Background()); err != nil {
+		return errors.Wrap(err, "failed to start tlt")
+	}
 
 	bat := batch.NewBatch()
 	if err := statedb.View(func(tx *bbolt.Tx) error {
@@ -147,6 +150,9 @@ func statedb2Factory() (err error) {
 		if err := factorydb.WriteBatch(bat); err != nil {
 			return err
 		}
+	}
+	if err = tlt.Stop(context.Background()); err != nil {
+		return errors.Wrap(err, "failed to stop tlt")
 	}
 	if err = dbForTrie.Stop(context.Background()); err != nil {
 		return errors.Wrap(err, "failed to stop db for trie")
