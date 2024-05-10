@@ -103,6 +103,23 @@ func statedb2Factory() (err error) {
 	}
 
 	bat := batch.NewBatch()
+	writeBatch := func(bat batch.KVStoreBatch) error {
+		if err = factorydb.WriteBatch(bat); err != nil {
+			return errors.Wrap(err, "failed to write batch")
+		}
+		for i := 0; i < bat.Size(); i++ {
+			e, err := bat.Entry(i)
+			if err != nil {
+				return errors.Wrap(err, "failed to get entry")
+			}
+			nsHash := hash.Hash160b([]byte(e.Namespace()))
+			keyLegacy := hash.Hash160b(e.Key())
+			if err = tlt.Upsert(nsHash[:], keyLegacy[:], e.Value()); err != nil {
+				return errors.Wrap(err, "failed to upsert tlt")
+			}
+		}
+		return nil
+	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
@@ -116,19 +133,8 @@ func statedb2Factory() (err error) {
 					if err := bar.Add(size); err != nil {
 						return errors.Wrap(err, "failed to add progress bar")
 					}
-					if err = factorydb.WriteBatch(bat); err != nil {
-						return errors.Wrap(err, "failed to write batch")
-					}
-					for i := 0; i < bat.Size(); i++ {
-						e, err := bat.Entry(i)
-						if err != nil {
-							return errors.Wrap(err, "failed to get entry")
-						}
-						nsHash := hash.Hash160b([]byte(e.Namespace()))
-						keyLegacy := hash.Hash160b(e.Key())
-						if err = tlt.Upsert(nsHash[:], keyLegacy[:], e.Value()); err != nil {
-							return errors.Wrap(err, "failed to upsert tlt")
-						}
+					if err = writeBatch(bat); err != nil {
+						return err
 					}
 					bat = batch.NewBatch()
 				}
@@ -147,13 +153,16 @@ func statedb2Factory() (err error) {
 		return err
 	}
 	if bat.Size() > 0 {
-		if err := factorydb.WriteBatch(bat); err != nil {
+		fmt.Printf("write the last batch %d\n", bat.Size())
+		if err := writeBatch(bat); err != nil {
 			return err
 		}
 	}
+	fmt.Printf("stop tlt\n")
 	if err = tlt.Stop(context.Background()); err != nil {
 		return errors.Wrap(err, "failed to stop tlt")
 	}
+	fmt.Printf("stop db\n")
 	if err = dbForTrie.Stop(context.Background()); err != nil {
 		return errors.Wrap(err, "failed to stop db for trie")
 	}
