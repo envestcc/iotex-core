@@ -16,6 +16,7 @@ import (
 	"github.com/iotexproject/iotex-core/db/batch"
 	"github.com/iotexproject/iotex-core/db/trie"
 	"github.com/iotexproject/iotex-core/db/trie/mptrie"
+	"github.com/iotexproject/iotex-core/pkg/util/byteutil"
 	"github.com/iotexproject/iotex-core/state/factory"
 	"github.com/iotexproject/iotex-core/tools/iomigrater/common"
 )
@@ -79,7 +80,6 @@ func statedb2Factory() (err error) {
 	}
 
 	size := 200000
-
 	statedb, err := bbolt.Open(statedbFile, 0666, nil)
 	if err != nil {
 		return err
@@ -114,8 +114,33 @@ func statedb2Factory() (err error) {
 			}
 			nsHash := hash.Hash160b([]byte(e.Namespace()))
 			keyLegacy := hash.Hash160b(e.Key())
-			if err = tlt.Upsert(nsHash[:], keyLegacy[:], e.Value()); err != nil {
-				return errors.Wrap(err, "failed to upsert tlt")
+			if e.Namespace() == factory.AccountKVNamespace && string(e.Key()) == factory.CurrentHeightKey {
+				height := byteutil.BytesToUint64(e.Value())
+				rootHash, err := tlt.RootHash()
+				if err != nil {
+					return err
+				}
+				if err = factorydb.Put(factory.AccountKVNamespace, []byte(factory.CurrentHeightKey), byteutil.Uint64ToBytes(height)); err != nil {
+					return errors.Wrap(err, "failed to put height")
+				}
+				if err = factorydb.Put(factory.ArchiveTrieNamespace, []byte(factory.ArchiveTrieRootKey), rootHash); err != nil {
+					return errors.Wrap(err, "failed to put root hash")
+				}
+				// Persist the historical accountTrie's root hash
+				if err = factorydb.Put(
+					factory.ArchiveTrieNamespace,
+					[]byte(fmt.Sprintf("%s-%d", factory.ArchiveTrieRootKey, height)),
+					rootHash,
+				); err != nil {
+					return errors.Wrap(err, "failed to put historical root hash")
+				}
+				if err = tlt.SetRootHash(rootHash); err != nil {
+					return errors.Wrap(err, "failed to set root hash")
+				}
+			} else {
+				if err = tlt.Upsert(nsHash[:], keyLegacy[:], e.Value()); err != nil {
+					return errors.Wrap(err, "failed to upsert tlt")
+				}
 			}
 		}
 		return nil
