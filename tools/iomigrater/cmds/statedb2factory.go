@@ -86,7 +86,7 @@ func statedb2Factory() (err error) {
 	}
 
 	size := 200000
-	statedb, err := bbolt.Open(statedbFile, 0666, nil)
+	statedb, err := bbolt.Open(statedbFile, 0666, &bbolt.Options{ReadOnly: true})
 	if err != nil {
 		return err
 	}
@@ -145,6 +145,10 @@ func statedb2Factory() (err error) {
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
+			if string(name) == factory.ArchiveTrieNamespace {
+				fmt.Printf("skip\n")
+				return nil
+			}
 			bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
 			b.ForEach(func(k, v []byte) error {
 				if v == nil {
