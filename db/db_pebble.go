@@ -63,6 +63,7 @@ func (b *PebbleDB) Start(_ context.Context) error {
 	db, err := pebble.Open(b.path, &pebble.Options{
 		Comparer:           comparer,
 		FormatMajorVersion: pebble.FormatPrePebblev1MarkedCompacted,
+		ReadOnly:           b.config.ReadOnly,
 	})
 	if err != nil {
 		return errors.Wrap(ErrIO, err.Error())
