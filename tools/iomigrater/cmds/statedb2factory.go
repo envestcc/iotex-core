@@ -86,7 +86,7 @@ func statedb2Factory() (err error) {
 	}
 	defer statedb.Close()
 
-	factorydb, err := db.CreatePebbleKVStore(db.DefaultConfig, factoryFile)
+	factorydb, err := db.CreateKVStore(db.DefaultConfig, factoryFile)
 	if err != nil {
 		return errors.Wrap(err, "failed to create db")
 	}
@@ -103,6 +103,7 @@ func statedb2Factory() (err error) {
 	}
 
 	bat := batch.NewBatch()
+	height := uint64(0)
 	writeBatch := func(bat batch.KVStoreBatch) error {
 		if err = factorydb.WriteBatch(bat); err != nil {
 			return errors.Wrap(err, "failed to write batch")
@@ -115,28 +116,7 @@ func statedb2Factory() (err error) {
 			nsHash := hash.Hash160b([]byte(e.Namespace()))
 			keyLegacy := hash.Hash160b(e.Key())
 			if e.Namespace() == factory.AccountKVNamespace && string(e.Key()) == factory.CurrentHeightKey {
-				height := byteutil.BytesToUint64(e.Value())
-				rootHash, err := tlt.RootHash()
-				if err != nil {
-					return err
-				}
-				if err = factorydb.Put(factory.AccountKVNamespace, []byte(factory.CurrentHeightKey), byteutil.Uint64ToBytes(height)); err != nil {
-					return errors.Wrap(err, "failed to put height")
-				}
-				if err = factorydb.Put(factory.ArchiveTrieNamespace, []byte(factory.ArchiveTrieRootKey), rootHash); err != nil {
-					return errors.Wrap(err, "failed to put root hash")
-				}
-				// Persist the historical accountTrie's root hash
-				if err = factorydb.Put(
-					factory.ArchiveTrieNamespace,
-					[]byte(fmt.Sprintf("%s-%d", factory.ArchiveTrieRootKey, height)),
-					rootHash,
-				); err != nil {
-					return errors.Wrap(err, "failed to put historical root hash")
-				}
-				if err = tlt.SetRootHash(rootHash); err != nil {
-					return errors.Wrap(err, "failed to set root hash")
-				}
+				height = byteutil.BytesToUint64(e.Value())
 			} else {
 				if err = tlt.Upsert(nsHash[:], keyLegacy[:], e.Value()); err != nil {
 					return errors.Wrap(err, "failed to upsert tlt")
@@ -182,6 +162,28 @@ func statedb2Factory() (err error) {
 		if err := writeBatch(bat); err != nil {
 			return err
 		}
+	}
+	rootHash, err := tlt.RootHash()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("finalize height %d, root %x\n", height, rootHash)
+	if err = factorydb.Put(factory.AccountKVNamespace, []byte(factory.CurrentHeightKey), byteutil.Uint64ToBytes(height)); err != nil {
+		return errors.Wrap(err, "failed to put height")
+	}
+	if err = factorydb.Put(factory.ArchiveTrieNamespace, []byte(factory.ArchiveTrieRootKey), rootHash); err != nil {
+		return errors.Wrap(err, "failed to put root hash")
+	}
+	// Persist the historical accountTrie's root hash
+	if err = factorydb.Put(
+		factory.ArchiveTrieNamespace,
+		[]byte(fmt.Sprintf("%s-%d", factory.ArchiveTrieRootKey, height)),
+		rootHash,
+	); err != nil {
+		return errors.Wrap(err, "failed to put historical root hash")
+	}
+	if err = tlt.SetRootHash(rootHash); err != nil {
+		return errors.Wrap(err, "failed to set root hash")
 	}
 	fmt.Printf("stop tlt\n")
 	if err = tlt.Stop(context.Background()); err != nil {
