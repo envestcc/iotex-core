@@ -197,7 +197,9 @@ func (b *PebbleDB) Filter(ns string, cond Condition, minKey []byte, maxKey []byt
 
 	iter := b.db.NewIter(&pebble.IterOptions{})
 	defer func() {
-		err = iter.Close()
+		if e := iter.Close(); e != nil {
+			log.L().Error("Failed to close iterator", zap.Error(e))
+		}
 	}()
 	for iter.SeekPrefixGE(nsKey(ns, minKey)); iter.Valid(); iter.Next() {
 		ck, v := iter.Key(), iter.Value()
@@ -217,6 +219,9 @@ func (b *PebbleDB) Filter(ns string, cond Condition, minKey []byte, maxKey []byt
 		copy(value, v)
 		keys = append(keys, key)
 		vals = append(vals, value)
+	}
+	if len(keys) == 0 {
+		return nil, nil, errors.Wrap(ErrNotExist, "filter returns no match")
 	}
 	return
 }
