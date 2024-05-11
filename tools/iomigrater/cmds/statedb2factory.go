@@ -43,6 +43,10 @@ var (
 		"english": "The path you want to migrate to",
 		"chinese": "您要迁移到的路径。",
 	}
+	stateDB2FactoryFlagPebbledbUse = map[string]string{
+		"english": "Output as pebbledb",
+		"chinese": "输出为 pebbledb",
+	}
 )
 
 var (
@@ -60,11 +64,13 @@ var (
 var (
 	statedbFile = ""
 	factoryFile = ""
+	outAsPebble = false
 )
 
 func init() {
 	StateDB2Factory.PersistentFlags().StringVarP(&statedbFile, "statedb", "s", "", common.TranslateInLang(stateDB2FactoryFlagStateDBFileUse))
 	StateDB2Factory.PersistentFlags().StringVarP(&factoryFile, "factory", "f", "", common.TranslateInLang(stateDB2FactoryFlagFactoryFileUse))
+	StateDB2Factory.PersistentFlags().BoolVarP(&outAsPebble, "pebbledb", "p", false, "Output as pebbledb")
 }
 
 func statedb2Factory() (err error) {
@@ -86,7 +92,14 @@ func statedb2Factory() (err error) {
 	}
 	defer statedb.Close()
 
-	factorydb, err := db.CreateKVStore(db.DefaultConfig, factoryFile)
+	var factorydb db.KVStore
+	if outAsPebble {
+		fmt.Printf("output as pebbledb\n")
+		factorydb, err = db.CreatePebbleKVStore(db.DefaultConfig, factoryFile)
+	} else {
+		fmt.Printf("output as boltdb\n")
+		factorydb, err = db.CreateKVStore(db.DefaultConfig, factoryFile)
+	}
 	if err != nil {
 		return errors.Wrap(err, "failed to create db")
 	}
