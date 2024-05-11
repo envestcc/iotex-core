@@ -105,9 +105,9 @@ func statedb2Factory() (err error) {
 	bat := batch.NewBatch()
 	height := uint64(0)
 	writeBatch := func(bat batch.KVStoreBatch) error {
-		if err = factorydb.WriteBatch(bat); err != nil {
-			return errors.Wrap(err, "failed to write batch")
-		}
+		// if err = factorydb.WriteBatch(bat); err != nil {
+		// 	return errors.Wrap(err, "failed to write batch")
+		// }
 		for i := 0; i < bat.Size(); i++ {
 			e, err := bat.Entry(i)
 			if err != nil {
@@ -122,6 +122,10 @@ func statedb2Factory() (err error) {
 					return errors.Wrap(err, "failed to upsert tlt")
 				}
 			}
+		}
+		// flush tlt
+		if _, err = tlt.RootHash(); err != nil {
+			return errors.Wrap(err, "failed to get root hash")
 		}
 		return nil
 	}
@@ -163,6 +167,8 @@ func statedb2Factory() (err error) {
 			return err
 		}
 	}
+
+	// finalize
 	rootHash, err := tlt.RootHash()
 	if err != nil {
 		return err
