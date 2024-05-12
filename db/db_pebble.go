@@ -227,6 +227,29 @@ func (b *PebbleDB) Filter(ns string, cond Condition, minKey []byte, maxKey []byt
 	return
 }
 
+func (b *PebbleDB) ForEach(fn func(ns string, k, v []byte) error) error {
+	if !b.IsReady() {
+		return ErrDBNotStarted
+	}
+	iter := b.db.NewIter(&pebble.IterOptions{})
+	defer func() {
+		if e := iter.Close(); e != nil {
+			log.L().Error("Failed to close iterator", zap.Error(e))
+		}
+	}()
+	for iter.First(); iter.Valid(); iter.Next() {
+		ck, v := iter.Key(), iter.Value()
+		k, err := decodeKey(ck)
+		if err != nil {
+			return err
+		}
+		if err := fn(string(ck[:prefixLength]), k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func nsKey(ns string, key []byte) []byte {
 	nk := nsToPrefix(ns)
 	return append(nk, key...)
