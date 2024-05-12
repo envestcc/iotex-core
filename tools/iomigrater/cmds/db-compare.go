@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
 
+	"github.com/iotexproject/go-pkgs/hash"
+
 	"github.com/iotexproject/iotex-core/db"
 	"github.com/iotexproject/iotex-core/state/factory"
 	"github.com/iotexproject/iotex-core/tools/iomigrater/common"
@@ -118,7 +120,7 @@ func dbCompare() (err error) {
 				// }
 				value, err := factoryDB.Get(string(name), k)
 				if err != nil {
-					fmt.Printf("key %x not found\n", k)
+					fmt.Printf("key %x not found in factory\n", k)
 					return nil
 				}
 				if !bytes.Equal(v, value) {
@@ -137,10 +139,34 @@ func dbCompare() (err error) {
 		}); err != nil {
 			return err
 		}
+
+		// in reverse order
+		count := 0
+		bucket := tx.Bucket([]byte(factory.ArchiveTrieNamespace))
+		if bucket == nil {
+			fmt.Printf("bucket %s not found\n", factory.ArchiveTrieNamespace)
+			return nil
+		}
+		err = factoryDB.ForEach(func(nsHashPrefix string, k, v []byte) error {
+			nsHash := hash.Hash160b([]byte(factory.ArchiveTrieNamespace))
+			if nsHashPrefix != string(nsHash[:8]) {
+				return nil
+			}
+			count++
+			if v := bucket.Get(k); v == nil {
+				fmt.Printf("key %x not found in statedb\n", k)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%d keys in factory %s\n", count, factory.ArchiveTrieNamespace)
 		return nil
 	}); err != nil {
 		return err
 	}
+
 	fmt.Printf("stop db\n")
 	if err = factoryDB.Stop(context.Background()); err != nil {
 		return errors.Wrap(err, "failed to stop db for trie")
