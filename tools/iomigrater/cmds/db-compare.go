@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
-	"github.com/schollz/progressbar/v2"
 	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
 
@@ -84,7 +82,7 @@ func dbCompare() (err error) {
 		return fmt.Errorf("the values of --statedb --factory flags cannot be the same")
 	}
 
-	size := 200000
+	// size := 200000
 	statedb, err := bbolt.Open(statedbFile, 0666, &bbolt.Options{ReadOnly: true})
 	if err != nil {
 		return err
@@ -110,30 +108,30 @@ func dbCompare() (err error) {
 				fmt.Printf("skip\n")
 				return nil
 			}
-			bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
+			// bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
 			b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
-				if err := bar.Add(size); err != nil {
-					return errors.Wrap(err, "failed to add progress bar")
-				}
+				// if err := bar.Add(size); err != nil {
+				// 	return errors.Wrap(err, "failed to add progress bar")
+				// }
 				value, err := factoryDB.Get(string(name), k)
 				if err != nil {
 					fmt.Printf("key %x not found\n", k)
-					return err
+					return nil
 				}
 				if !bytes.Equal(v, value) {
 					fmt.Printf("key %x value mismatch\n", k)
 					fmt.Printf("statedb value %x\n", v)
 					fmt.Printf("factorydb value %x\n", value)
-					return errors.New("value mismatch")
+					return nil
 				}
 				return nil
 			})
-			if err := bar.Finish(); err != nil {
-				return err
-			}
+			// if err := bar.Finish(); err != nil {
+			// 	return err
+			// }
 			fmt.Println()
 			return nil
 		}); err != nil {
