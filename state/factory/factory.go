@@ -309,14 +309,17 @@ func (sf *factory) flusherOptions(preEaster bool) []db.KVStoreFlusherOption {
 			}
 			return wi.Serialize()
 		}),
-	}
-	if sf.saveHistory {
-		opts = append(opts, db.FlushTranslateOption(func(wi *batch.WriteInfo) *batch.WriteInfo {
-			if wi.WriteType() == batch.Delete && wi.Namespace() == ArchiveTrieNamespace {
+		db.FlushTranslateOption(func(wi *batch.WriteInfo) *batch.WriteInfo {
+			// only flush accountTrie and height
+			if (wi.Namespace() != ArchiveTrieNamespace) &&
+				(wi.Namespace() != AccountKVNamespace || string(wi.Key()) != CurrentHeightKey) {
+				return nil
+			}
+			if sf.saveHistory && wi.WriteType() == batch.Delete && wi.Namespace() == ArchiveTrieNamespace {
 				return nil
 			}
 			return wi
-		}))
+		}),
 	}
 
 	return opts
