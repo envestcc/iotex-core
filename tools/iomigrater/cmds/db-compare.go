@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -75,6 +76,7 @@ var (
 func init() {
 	DBCompare.PersistentFlags().StringVarP(&statedbFile, "statedb", "s", "", common.TranslateInLang(stateDB2FactoryFlagStateDBFileUse))
 	DBCompare.PersistentFlags().StringVarP(&factoryFile, "factory", "f", "", common.TranslateInLang(stateDB2FactoryFlagFactoryFileUse))
+	DBCompare.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "namespaces to compare")
 }
 
 func dbCompare() (err error) {
@@ -166,6 +168,10 @@ func dbCompare() (err error) {
 	unmatchs := [][][]byte{}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
+				fmt.Printf("skip ns %s\n", name)
+				return nil
+			}
 			if string(name) == factory.ArchiveTrieNamespace {
 				fmt.Printf("skip namespace %s\n", name)
 				return nil

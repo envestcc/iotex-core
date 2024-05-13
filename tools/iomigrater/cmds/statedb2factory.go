@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -69,6 +70,7 @@ var (
 	factoryFile = ""
 	outAsPebble = false
 	v2          = false
+	namespaces  = []string{}
 )
 
 func init() {
@@ -76,6 +78,7 @@ func init() {
 	StateDB2Factory.PersistentFlags().StringVarP(&factoryFile, "factory", "f", "", common.TranslateInLang(stateDB2FactoryFlagFactoryFileUse))
 	StateDB2Factory.PersistentFlags().BoolVarP(&outAsPebble, "pebbledb", "p", false, "Output as pebbledb")
 	StateDB2Factory.PersistentFlags().BoolVarP(&v2, "v2", "2", false, "Use workingSet to convert")
+	StateDB2Factory.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "Namespaces to migrate")
 }
 
 func statedb2Factory() (err error) {
@@ -152,6 +155,10 @@ func statedb2Factory() (err error) {
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
+				fmt.Printf("skip ns %s\n", name)
+				return nil
+			}
 			if string(name) == factory.ArchiveTrieNamespace {
 				fmt.Printf("skip ns %s\n", name)
 				return nil
@@ -345,6 +352,10 @@ func statedb2FactoryV2() (err error) {
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
+				fmt.Printf("skip ns %s\n", name)
+				return nil
+			}
 			if string(name) == factory.ArchiveTrieNamespace {
 				fmt.Printf("skip ns %s\n", name)
 				return nil
