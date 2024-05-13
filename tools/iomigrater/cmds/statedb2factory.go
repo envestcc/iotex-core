@@ -152,12 +152,13 @@ func statedb2Factory() (err error) {
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
-			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
 			if string(name) == factory.ArchiveTrieNamespace {
-				fmt.Printf("skip\n")
+				fmt.Printf("skip ns %s\n", name)
 				return nil
 			}
-			bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
+			keyNum := b.Stats().KeyN
+			fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
+			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
 			b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
