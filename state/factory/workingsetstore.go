@@ -58,6 +58,10 @@ func newStateDBWorkingSetStore(view protocol.View, flusher db.KVStoreFlusher, re
 	}
 }
 
+func NewFactoryWorkingSetStore(view protocol.View, flusher db.KVStoreFlusher, nodeCache cache.LRUCache) (workingSetStore, error) {
+	return newFactoryWorkingSetStore(view, flusher, nodeCache)
+}
+
 func newFactoryWorkingSetStore(view protocol.View, flusher db.KVStoreFlusher, nodeCache cache.LRUCache) (workingSetStore, error) {
 	tlt, err := newTwoLayerTrie(ArchiveTrieNamespace, flusher.KVStoreWithBuffer(), nodeCache, ArchiveTrieRootKey, true)
 	if err != nil {
