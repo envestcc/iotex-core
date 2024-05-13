@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/schollz/progressbar/v2"
 	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
 
@@ -161,22 +162,24 @@ func dbCompare() (err error) {
 		}
 		fmt.Printf("stop wss end time %s\n", time.Now().Format(time.RFC3339))
 	}()
-
+	notfounds := [][][]byte{}
+	unmatchs := [][][]byte{}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			if string(name) == factory.ArchiveTrieNamespace {
 				fmt.Printf("skip namespace %s\n", name)
 				return nil
 			}
-			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
-			// bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
+			keyNum := b.Stats().KeyN
+			fmt.Printf("compare namespace: %s %d\n", name, keyNum)
+			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
 			b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
-				// if err := bar.Add(size); err != nil {
-				// 	return errors.Wrap(err, "failed to add progress bar")
-				// }
+				if err := bar.Add(1); err != nil {
+					return errors.Wrap(err, "failed to add progress bar")
+				}
 				var (
 					value []byte
 					err   error
@@ -187,20 +190,22 @@ func dbCompare() (err error) {
 					value, err = wss.Get(string(name), k)
 				}
 				if err != nil {
-					fmt.Printf("ns %s key %x not found in factory\n", name, k)
+					// fmt.Printf("ns %s key %x not found in factory\n", name, k)
+					notfounds = append(notfounds, [][]byte{name, k})
 					return nil
 				}
 				if !bytes.Equal(v, value) {
-					fmt.Printf("ns %s key %x value mismatch\n", name, k)
-					fmt.Printf("\tstatedb value %x\n", v)
-					fmt.Printf("\tfactorydb value %x\n", value)
+					unmatchs = append(unmatchs, [][]byte{name, k, v})
+					// fmt.Printf("ns %s key %x value mismatch\n", name, k)
+					// fmt.Printf("\tstatedb value %x\n", v)
+					// fmt.Printf("\tfactorydb value %x\n", value)
 					return nil
 				}
 				return nil
 			})
-			// if err := bar.Finish(); err != nil {
-			// 	return err
-			// }
+			if err := bar.Finish(); err != nil {
+				return err
+			}
 			fmt.Println()
 			return nil
 		}); err != nil {
@@ -209,6 +214,16 @@ func dbCompare() (err error) {
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	// print notfounds and unmatchs
+	fmt.Printf("not founds %d:\n", len(notfounds))
+	for _, nf := range notfounds {
+		fmt.Printf("not found: ns %s key %x\n", nf[0], nf[1])
+	}
+	fmt.Printf("unmatchs %d:\n", len(unmatchs))
+	for _, um := range unmatchs {
+		fmt.Printf("unmatch: ns %s key %x value %x\n", um[0], um[1], um[2])
 	}
 	return nil
 }
