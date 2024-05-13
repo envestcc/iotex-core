@@ -308,6 +308,13 @@ func statedb2FactoryV2() (err error) {
 			}
 			return wi.Serialize()
 		}),
+		db.FlushTranslateOption(func(wi *batch.WriteInfo) *batch.WriteInfo {
+			if (wi.Namespace() == factory.ArchiveTrieNamespace) ||
+				(wi.Namespace() == factory.AccountKVNamespace && string(wi.Key()) == factory.CurrentHeightKey) {
+				return wi
+			}
+			return nil
+		}),
 	}
 	flusher, err := db.NewKVStoreFlusher(
 		factorydb,
