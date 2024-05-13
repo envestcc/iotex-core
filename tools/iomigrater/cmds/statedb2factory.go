@@ -128,6 +128,7 @@ func statedb2Factory() (err error) {
 
 	bat := batch.NewBatch()
 	height := uint64(0)
+	realWriteCount := uint64(0)
 	writeBatch := func(bat batch.KVStoreBatch) error {
 		// if err = factorydb.WriteBatch(bat); err != nil {
 		// 	return errors.Wrap(err, "failed to write batch")
@@ -146,10 +147,7 @@ func statedb2Factory() (err error) {
 					return errors.Wrap(err, "failed to upsert tlt")
 				}
 			}
-		}
-		// flush tlt
-		if _, err = tlt.RootHash(); err != nil {
-			return errors.Wrap(err, "failed to get root hash")
+			realWriteCount++
 		}
 		return nil
 	}
@@ -166,18 +164,14 @@ func statedb2Factory() (err error) {
 			keyNum := b.Stats().KeyN
 			fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
 			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
-			b.ForEach(func(k, v []byte) error {
+			err = b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
-				ck := make([]byte, len(k))
-				copy(ck, k)
-				cv := make([]byte, len(v))
-				copy(cv, v)
-				bat.Put(string(name), ck, cv, "failed to put")
+				bat.Put(string(name), k, v, "failed to put")
 				if uint32(bat.Size()) >= uint32(size) {
-					if err := bar.Add(size); err != nil {
-						return errors.Wrap(err, "failed to add progress bar")
+					if err = bar.Add(slices.Min([]int{bat.Size(), keyNum})); err != nil {
+						fmt.Printf("failed to add progress bar %v\n", err)
 					}
 					if err = writeBatch(bat); err != nil {
 						return err
@@ -186,6 +180,9 @@ func statedb2Factory() (err error) {
 				}
 				return nil
 			})
+			if err != nil {
+				return err
+			}
 			if err := bar.Finish(); err != nil {
 				return err
 			}
@@ -204,7 +201,7 @@ func statedb2Factory() (err error) {
 			return err
 		}
 	}
-
+	fmt.Printf("real write count %d\n", realWriteCount)
 	// finalize
 	rootHash, err := tlt.RootHash()
 	if err != nil {
@@ -363,18 +360,14 @@ func statedb2FactoryV2() (err error) {
 			keyNum := b.Stats().KeyN
 			fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
 			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
-			b.ForEach(func(k, v []byte) error {
+			err = b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
-				ck := make([]byte, len(k))
-				copy(ck, k)
-				cv := make([]byte, len(v))
-				copy(cv, v)
-				bat.Put(string(name), ck, cv, "failed to put")
+				bat.Put(string(name), k, v, "failed to put")
 				if uint32(bat.Size()) >= uint32(size) {
-					if err := bar.Add(size); err != nil {
-						return errors.Wrap(err, "failed to add progress bar")
+					if err := bar.Add(slices.Min([]int{bat.Size(), keyNum})); err != nil {
+						fmt.Printf("failed to add progress bar %v\n", err)
 					}
 					if err = writeBatch(bat); err != nil {
 						return err
@@ -383,6 +376,9 @@ func statedb2FactoryV2() (err error) {
 				}
 				return nil
 			})
+			if err != nil {
+				return err
+			}
 			if err := bar.Finish(); err != nil {
 				return err
 			}
