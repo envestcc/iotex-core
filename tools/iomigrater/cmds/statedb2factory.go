@@ -336,7 +336,7 @@ func statedb2FactoryV2() (err error) {
 				wss.Put(e.Namespace(), e.Key(), e.Value())
 			}
 		}
-		return nil
+		return wss.Commit()
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
@@ -383,6 +383,9 @@ func statedb2FactoryV2() (err error) {
 	// finalize
 	if err := wss.Finalize(height); err != nil {
 		return errors.Wrap(err, "failed to finalize")
+	}
+	if err := wss.Commit(); err != nil {
+		return errors.Wrap(err, "failed to commit")
 	}
 	return nil
 }
