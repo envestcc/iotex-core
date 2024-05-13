@@ -10,8 +10,11 @@ import (
 	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
 
+	"github.com/iotexproject/go-pkgs/cache"
 	"github.com/iotexproject/go-pkgs/hash"
 
+	"github.com/iotexproject/iotex-core/action/protocol/execution/evm"
+	"github.com/iotexproject/iotex-core/action/protocol/staking"
 	"github.com/iotexproject/iotex-core/db"
 	"github.com/iotexproject/iotex-core/db/batch"
 	"github.com/iotexproject/iotex-core/db/trie"
@@ -65,15 +68,20 @@ var (
 	statedbFile = ""
 	factoryFile = ""
 	outAsPebble = false
+	v2          = false
 )
 
 func init() {
 	StateDB2Factory.PersistentFlags().StringVarP(&statedbFile, "statedb", "s", "", common.TranslateInLang(stateDB2FactoryFlagStateDBFileUse))
 	StateDB2Factory.PersistentFlags().StringVarP(&factoryFile, "factory", "f", "", common.TranslateInLang(stateDB2FactoryFlagFactoryFileUse))
 	StateDB2Factory.PersistentFlags().BoolVarP(&outAsPebble, "pebbledb", "p", false, "Output as pebbledb")
+	StateDB2Factory.PersistentFlags().BoolVarP(&v2, "v2", "2", false, "Use workingSet to convert")
 }
 
 func statedb2Factory() (err error) {
+	if v2 {
+		return statedb2FactoryV2()
+	}
 	// Check flags
 	if statedbFile == "" {
 		return fmt.Errorf("--statedb is empty")
@@ -215,6 +223,166 @@ func statedb2Factory() (err error) {
 	fmt.Printf("stop db\n")
 	if err = dbForTrie.Stop(context.Background()); err != nil {
 		return errors.Wrap(err, "failed to stop db for trie")
+	}
+	return nil
+}
+
+func statedb2FactoryV2() (err error) {
+	// Check flags
+	if statedbFile == "" {
+		return fmt.Errorf("--statedb is empty")
+	}
+	if factoryFile == "" {
+		return fmt.Errorf("--factory is empty")
+	}
+	if statedbFile == factoryFile {
+		return fmt.Errorf("the values of --statedb --factory flags cannot be the same")
+	}
+
+	size := 200000
+	// open statedb
+	statedb, err := bbolt.Open(statedbFile, 0666, &bbolt.Options{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer statedb.Close()
+	// read statedb height
+	height := uint64(0)
+	statedb.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte(factory.AccountKVNamespace))
+		if bucket == nil {
+			return errors.New("bucket not found")
+		}
+		height = byteutil.BytesToUint64(bucket.Get([]byte(factory.CurrentHeightKey)))
+		return nil
+	})
+	// open factorydb
+	var factorydb db.KVStore
+	if outAsPebble {
+		fmt.Printf("output as pebbledb\n")
+		factorydb, err = db.CreatePebbleKVStore(db.DefaultConfig, factoryFile)
+	} else {
+		fmt.Printf("output as boltdb\n")
+		factorydb, err = db.CreateKVStore(db.DefaultConfig, factoryFile)
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to create db")
+	}
+	if err = factorydb.Start(context.Background()); err != nil {
+		return errors.Wrap(err, "failed to start factory db")
+	}
+	defer func() {
+		fmt.Printf("stop factorydb begin time %s\n", time.Now().Format(time.RFC3339))
+		if e := factorydb.Stop(context.Background()); e != nil {
+			fmt.Printf("failed to stop factorydb: %v\n", e)
+		}
+		fmt.Printf("stop factorydb end time %s\n", time.Now().Format(time.RFC3339))
+	}()
+	// open factory working set store
+	preEaster := height < 4478761
+	opts := []db.KVStoreFlusherOption{
+		db.SerializeFilterOption(func(wi *batch.WriteInfo) bool {
+			if wi.Namespace() == factory.ArchiveTrieNamespace {
+				return true
+			}
+			if wi.Namespace() != evm.CodeKVNameSpace && wi.Namespace() != staking.CandsMapNS {
+				return false
+			}
+			return preEaster
+		}),
+		db.SerializeOption(func(wi *batch.WriteInfo) []byte {
+			if preEaster {
+				return wi.SerializeWithoutWriteType()
+			}
+			return wi.Serialize()
+		}),
+	}
+	flusher, err := db.NewKVStoreFlusher(
+		factorydb,
+		batch.NewCachedBatch(),
+		opts...,
+	)
+	if err != nil {
+		return err
+	}
+	wss, err := factory.NewFactoryWorkingSetStore(nil, flusher, cache.NewThreadSafeLruCache(1000))
+	if err != nil {
+		return err
+	}
+	if err = wss.Start(context.Background()); err != nil {
+		return errors.Wrap(err, "failed to start db for trie")
+	}
+	defer func() {
+		fmt.Printf("stop wss begin time %s\n", time.Now().Format(time.RFC3339))
+		if e := wss.Stop(context.Background()); e != nil {
+			fmt.Printf("failed to stop wss: %v\n", e)
+		}
+		fmt.Printf("stop wss end time %s\n", time.Now().Format(time.RFC3339))
+	}()
+
+	bat := batch.NewBatch()
+	writeBatch := func(bat batch.KVStoreBatch) error {
+		// if err = factorydb.WriteBatch(bat); err != nil {
+		// 	return errors.Wrap(err, "failed to write batch")
+		// }
+		for i := 0; i < bat.Size(); i++ {
+			e, err := bat.Entry(i)
+			if err != nil {
+				return errors.Wrap(err, "failed to get entry")
+			}
+			if e.Namespace() == factory.AccountKVNamespace && string(e.Key()) == factory.CurrentHeightKey {
+				height = byteutil.BytesToUint64(e.Value())
+			} else {
+				wss.Put(e.Namespace(), e.Key(), e.Value())
+			}
+		}
+		return nil
+	}
+	if err := statedb.View(func(tx *bbolt.Tx) error {
+		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
+			if string(name) == factory.ArchiveTrieNamespace {
+				fmt.Printf("skip\n")
+				return nil
+			}
+			bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
+			b.ForEach(func(k, v []byte) error {
+				if v == nil {
+					panic("unexpected nested bucket")
+				}
+				bat.Put(string(name), k, v, "failed to put")
+				if uint32(bat.Size()) >= uint32(size) {
+					if err := bar.Add(size); err != nil {
+						return errors.Wrap(err, "failed to add progress bar")
+					}
+					if err = writeBatch(bat); err != nil {
+						return err
+					}
+					bat = batch.NewBatch()
+				}
+				return nil
+			})
+			if err := bar.Finish(); err != nil {
+				return err
+			}
+			fmt.Println()
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if bat.Size() > 0 {
+		fmt.Printf("write the last batch %d\n", bat.Size())
+		if err := writeBatch(bat); err != nil {
+			return err
+		}
+	}
+	// finalize
+	if err := wss.Finalize(height); err != nil {
+		return errors.Wrap(err, "failed to finalize")
 	}
 	return nil
 }
