@@ -187,11 +187,11 @@ func dbCompare() (err error) {
 					value, err = wss.Get(string(name), k)
 				}
 				if err != nil {
-					fmt.Printf("ns %s key %x(%s) not found in factory\n", name, k, k)
+					fmt.Printf("ns %s key %x not found in factory\n", name, k)
 					return nil
 				}
 				if !bytes.Equal(v, value) {
-					fmt.Printf("ns %s key %x(%s) value mismatch\n", name, k, k)
+					fmt.Printf("ns %s key %x value mismatch\n", name, k)
 					fmt.Printf("\tstatedb value %x\n", v)
 					fmt.Printf("\tfactorydb value %x\n", value)
 					return nil
