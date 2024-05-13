@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
 
-	"github.com/iotexproject/go-pkgs/hash"
+	"github.com/iotexproject/go-pkgs/cache"
 
+	"github.com/iotexproject/iotex-core/action/protocol/execution/evm"
+	"github.com/iotexproject/iotex-core/action/protocol/staking"
 	"github.com/iotexproject/iotex-core/db"
+	"github.com/iotexproject/iotex-core/db/batch"
+	"github.com/iotexproject/iotex-core/pkg/util/byteutil"
 	"github.com/iotexproject/iotex-core/state/factory"
 	"github.com/iotexproject/iotex-core/tools/iomigrater/common"
 )
@@ -90,23 +94,78 @@ func dbCompare() (err error) {
 		return err
 	}
 	defer statedb.Close()
-
-	comparer := pebble.DefaultComparer
-	comparer.Split = func(a []byte) int {
-		return 8
+	// read statedb height
+	height := uint64(0)
+	statedb.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte(factory.AccountKVNamespace))
+		if bucket == nil {
+			return errors.New("bucket not found")
+		}
+		height = byteutil.BytesToUint64(bucket.Get([]byte(factory.CurrentHeightKey)))
+		return nil
+	})
+	// open factorydb
+	var factorydb db.KVStore
+	factorydb, err = db.CreatePebbleKVStore(db.DefaultConfig, factoryFile)
+	if err != nil {
+		return errors.Wrap(err, "failed to create db")
 	}
-	cfg := db.DefaultConfig
-	cfg.DbPath = factoryFile
-	cfg.ReadOnly = true
-	factoryDB := db.NewPebbleDB(cfg)
-	if err := factoryDB.Start(context.Background()); err != nil {
+	if err = factorydb.Start(context.Background()); err != nil {
+		return errors.Wrap(err, "failed to start factory db")
+	}
+	defer func() {
+		fmt.Printf("stop factorydb begin time %s\n", time.Now().Format(time.RFC3339))
+		if e := factorydb.Stop(context.Background()); e != nil {
+			fmt.Printf("failed to stop factorydb: %v\n", e)
+		}
+		fmt.Printf("stop factorydb end time %s\n", time.Now().Format(time.RFC3339))
+	}()
+	// open factory working set store
+	preEaster := height < 4478761
+	opts := []db.KVStoreFlusherOption{
+		db.SerializeFilterOption(func(wi *batch.WriteInfo) bool {
+			if wi.Namespace() == factory.ArchiveTrieNamespace {
+				return true
+			}
+			if wi.Namespace() != evm.CodeKVNameSpace && wi.Namespace() != staking.CandsMapNS {
+				return false
+			}
+			return preEaster
+		}),
+		db.SerializeOption(func(wi *batch.WriteInfo) []byte {
+			if preEaster {
+				return wi.SerializeWithoutWriteType()
+			}
+			return wi.Serialize()
+		}),
+	}
+	flusher, err := db.NewKVStoreFlusher(
+		factorydb,
+		batch.NewCachedBatch(),
+		opts...,
+	)
+	if err != nil {
 		return err
 	}
+	wss, err := factory.NewFactoryWorkingSetStore(nil, flusher, cache.NewThreadSafeLruCache(1000))
+	if err != nil {
+		return err
+	}
+	if err = wss.Start(context.Background()); err != nil {
+		return errors.Wrap(err, "failed to start db for trie")
+	}
+	defer func() {
+		fmt.Printf("stop wss begin time %s\n", time.Now().Format(time.RFC3339))
+		if e := wss.Stop(context.Background()); e != nil {
+			fmt.Printf("failed to stop wss: %v\n", e)
+		}
+		fmt.Printf("stop wss end time %s\n", time.Now().Format(time.RFC3339))
+	}()
 
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
-			if string(name) != factory.ArchiveTrieNamespace {
+			if string(name) == factory.ArchiveTrieNamespace {
 				fmt.Printf("skip\n")
 				return nil
 			}
@@ -118,15 +177,15 @@ func dbCompare() (err error) {
 				// if err := bar.Add(size); err != nil {
 				// 	return errors.Wrap(err, "failed to add progress bar")
 				// }
-				value, err := factoryDB.Get(string(name), k)
+				value, err := wss.Get(string(name), k)
 				if err != nil {
-					fmt.Printf("key %x not found in factory\n", k)
+					fmt.Printf("ns %s key %x not found in factory\n", name, k)
 					return nil
 				}
 				if !bytes.Equal(v, value) {
-					fmt.Printf("key %x value mismatch\n", k)
-					fmt.Printf("statedb value %x\n", v)
-					fmt.Printf("factorydb value %x\n", value)
+					fmt.Printf("ns %s key %x value mismatch\n", name, k)
+					fmt.Printf("\tstatedb value %x\n", v)
+					fmt.Printf("\tfactorydb value %x\n", value)
 					return nil
 				}
 				return nil
@@ -139,37 +198,9 @@ func dbCompare() (err error) {
 		}); err != nil {
 			return err
 		}
-
-		// in reverse order
-		count := 0
-		bucket := tx.Bucket([]byte(factory.ArchiveTrieNamespace))
-		if bucket == nil {
-			fmt.Printf("bucket %s not found\n", factory.ArchiveTrieNamespace)
-			return nil
-		}
-		err = factoryDB.ForEach(func(nsHashPrefix string, k, v []byte) error {
-			nsHash := hash.Hash160b([]byte(factory.ArchiveTrieNamespace))
-			if nsHashPrefix != string(nsHash[:8]) {
-				return nil
-			}
-			count++
-			if v := bucket.Get(k); v == nil {
-				fmt.Printf("key %x not found in statedb\n", k)
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("%d keys in factory %s\n", count, factory.ArchiveTrieNamespace)
 		return nil
 	}); err != nil {
 		return err
-	}
-
-	fmt.Printf("stop db\n")
-	if err = factoryDB.Stop(context.Background()); err != nil {
-		return errors.Wrap(err, "failed to stop db for trie")
 	}
 	return nil
 }
