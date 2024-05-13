@@ -162,7 +162,11 @@ func statedb2Factory() (err error) {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
-				bat.Put(string(name), k, v, "failed to put")
+				ck := make([]byte, len(k))
+				copy(ck, k)
+				cv := make([]byte, len(v))
+				copy(cv, v)
+				bat.Put(string(name), ck, cv, "failed to put")
 				if uint32(bat.Size()) >= uint32(size) {
 					if err := bar.Add(size); err != nil {
 						return errors.Wrap(err, "failed to add progress bar")
@@ -340,17 +344,22 @@ func statedb2FactoryV2() (err error) {
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
-			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
 			if string(name) == factory.ArchiveTrieNamespace {
-				fmt.Printf("skip\n")
+				fmt.Printf("skip ns %s\n", name)
 				return nil
 			}
-			bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
+			keyNum := b.Stats().KeyN
+			fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
+			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
 			b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
-				bat.Put(string(name), k, v, "failed to put")
+				ck := make([]byte, len(k))
+				copy(ck, k)
+				cv := make([]byte, len(v))
+				copy(cv, v)
+				bat.Put(string(name), ck, cv, "failed to put")
 				if uint32(bat.Size()) >= uint32(size) {
 					if err := bar.Add(size); err != nil {
 						return errors.Wrap(err, "failed to add progress bar")
