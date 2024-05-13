@@ -149,6 +149,9 @@ func statedb2Factory() (err error) {
 			}
 			realWriteCount++
 		}
+		if _, err := tlt.RootHash(); err != nil {
+			return errors.Wrap(err, "failed to get root hash")
+		}
 		return nil
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
