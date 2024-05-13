@@ -164,11 +164,11 @@ func dbCompare() (err error) {
 
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
-			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
 			if string(name) == factory.ArchiveTrieNamespace {
-				fmt.Printf("skip\n")
+				fmt.Printf("skip namespace %s\n", name)
 				return nil
 			}
+			fmt.Printf("migrating namespace: %s %d\n", name, b.Stats().KeyN)
 			// bar := progressbar.NewOptions(b.Stats().KeyN, progressbar.OptionThrottle(time.Second))
 			b.ForEach(func(k, v []byte) error {
 				if v == nil {
