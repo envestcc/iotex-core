@@ -73,6 +73,7 @@ var (
 	outAsPebble = false
 	v2          = false
 	namespaces  = []string{}
+	trieMaxSize = 10000000
 )
 
 func init() {
@@ -81,6 +82,7 @@ func init() {
 	StateDB2Factory.PersistentFlags().BoolVarP(&outAsPebble, "pebbledb", "p", false, "Output as pebbledb")
 	StateDB2Factory.PersistentFlags().BoolVarP(&v2, "v2", "2", false, "Use workingSet to convert")
 	StateDB2Factory.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "Namespaces to migrate")
+	StateDB2Factory.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
 }
 
 func statedb2Factory() (err error) {
@@ -259,7 +261,6 @@ func statedb2FactoryV2() (err error) {
 	}
 
 	size := 200000
-	trieMaxSize := 20000000
 	// open statedb
 	statedb, err := bbolt.Open(statedbFile, 0666, &bbolt.Options{ReadOnly: true})
 	if err != nil {
