@@ -9,9 +9,6 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
-	"github.com/iotexproject/iotex-core/pkg/log"
 )
 
 const (
@@ -111,7 +108,6 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 	)
 
 	wg.Add(len(b.writeQueue))
-	usedQueue := make([]bool, len(b.writeQueue))
 	for i, wi := range b.writeQueue {
 		go func(i int, info *WriteInfo) {
 			defer wg.Done()
@@ -119,7 +115,6 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 				return
 			}
 
-			usedQueue[i] = true
 			idx := i
 			var data []byte
 			if serialize != nil {
@@ -131,16 +126,6 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 		}(i, wi)
 	}
 	wg.Wait()
-
-	// debug: print out the serialize queue
-	for i := range usedQueue {
-		used := "filtered"
-		if usedQueue[i] {
-			used = "used"
-		}
-		wi := b.writeQueue[i]
-		log.L().Info("writeQueue", zap.Int("index", i), zap.Int("type", int(wi.WriteType())), zap.String("ns", wi.Namespace()), log.Hex("key", wi.Key()), log.Hex("value", wi.Value()), zap.String("status", used))
-	}
 
 	var returnedBytes []byte
 	for _, sb := range serialisedBytes {
