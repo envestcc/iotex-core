@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"slices"
 	"time"
 
@@ -82,6 +84,11 @@ func init() {
 }
 
 func statedb2Factory() (err error) {
+	// Start pprof
+	go func() {
+		http.ListenAndServe("0.0.0.0:6060", nil)
+	}()
+
 	if v2 {
 		return statedb2FactoryV2()
 	}
