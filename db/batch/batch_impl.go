@@ -133,7 +133,7 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 
 	// debug: print out the serialize queue
 	for i, wi := range b.writeQueue {
-		log.L().Info("writeQueue", zap.Int("index", i), zap.Int("type", int(wi.WriteType())), log.Hex("key", wi.Key()), log.Hex("value", wi.Value()))
+		log.L().Info("writeQueue", zap.Int("index", i), zap.Int("type", int(wi.WriteType())), zap.String("ns", wi.Namespace()), log.Hex("key", wi.Key()), log.Hex("value", wi.Value()))
 	}
 
 	var returnedBytes []byte
