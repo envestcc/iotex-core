@@ -111,6 +111,7 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 	)
 
 	wg.Add(len(b.writeQueue))
+	usedQueue := make([]bool, len(b.writeQueue))
 	for i, wi := range b.writeQueue {
 		go func(i int, info *WriteInfo) {
 			defer wg.Done()
@@ -118,6 +119,7 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 				return
 			}
 
+			usedQueue[i] = true
 			idx := i
 			var data []byte
 			if serialize != nil {
@@ -125,15 +127,17 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 			} else {
 				data = info.Serialize()
 			}
-
 			serialisedBytes[idx] = data
 		}(i, wi)
 	}
 	wg.Wait()
 
 	// debug: print out the serialize queue
-	for i, wi := range b.writeQueue {
-		log.L().Info("writeQueue", zap.Int("index", i), zap.Int("type", int(wi.WriteType())), zap.String("ns", wi.Namespace()), log.Hex("key", wi.Key()), log.Hex("value", wi.Value()))
+	for i := range usedQueue {
+		if usedQueue[i] {
+			wi := b.writeQueue[i]
+			log.L().Info("writeQueue", zap.Int("index", i), zap.Int("type", int(wi.WriteType())), zap.String("ns", wi.Namespace()), log.Hex("key", wi.Key()), log.Hex("value", wi.Value()))
+		}
 	}
 
 	var returnedBytes []byte
