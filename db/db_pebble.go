@@ -221,6 +221,7 @@ func (b *PebbleDB) Filter(ns string, cond Condition, minKey []byte, maxKey []byt
 		keys = append(keys, key)
 		vals = append(vals, value)
 	}
+	log.L().Info("PebbleDB.Filter", zap.String("ns", ns), zap.Int("num", len(keys)))
 	if len(keys) == 0 {
 		return nil, nil, errors.Wrap(ErrNotExist, "filter returns no match")
 	}
