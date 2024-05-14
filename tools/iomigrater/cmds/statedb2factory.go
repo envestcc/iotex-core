@@ -316,13 +316,6 @@ func statedb2FactoryV2() (err error) {
 			}
 			return wi.Serialize()
 		}),
-		db.FlushTranslateOption(func(wi *batch.WriteInfo) *batch.WriteInfo {
-			if (wi.Namespace() == factory.ArchiveTrieNamespace) ||
-				(wi.Namespace() == factory.AccountKVNamespace && string(wi.Key()) == factory.CurrentHeightKey) {
-				return wi
-			}
-			return nil
-		}),
 	}
 	flusher, err := db.NewKVStoreFlusher(
 		factorydb,
@@ -351,9 +344,9 @@ func statedb2FactoryV2() (err error) {
 	trieSize := uint64(0)
 	bat := batch.NewBatch()
 	writeBatch := func(bat batch.KVStoreBatch) error {
-		if err = factorydb.WriteBatch(bat); err != nil {
-			return errors.Wrap(err, "failed to write batch")
-		}
+		// if err = factorydb.WriteBatch(bat); err != nil {
+		// 	return errors.Wrap(err, "failed to write batch")
+		// }
 		trieSize += uint64(bat.Size())
 		for i := 0; i < bat.Size(); i++ {
 			e, err := bat.Entry(i)
