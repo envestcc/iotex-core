@@ -14,12 +14,10 @@ import (
 	"github.com/iotexproject/iotex-address/address"
 	"github.com/iotexproject/iotex-proto/golang/iotextypes"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/iotexproject/iotex-core/action"
 	"github.com/iotexproject/iotex-core/action/protocol"
 	accountutil "github.com/iotexproject/iotex-core/action/protocol/account/util"
-	"github.com/iotexproject/iotex-core/pkg/log"
 	"github.com/iotexproject/iotex-core/pkg/util/byteutil"
 	"github.com/iotexproject/iotex-core/state"
 )
@@ -476,25 +474,19 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 ) (*receiptLog, []*action.TransactionLog, error) {
 	actionCtx := protocol.MustGetActionCtx(ctx)
 	featureCtx := protocol.MustGetFeatureCtx(ctx)
-	lol := log.L().With(zap.String("func", "handleDepositToStake"))
 	log := newReceiptLog(p.addr.String(), HandleDepositToStake, featureCtx.NewStakingReceiptFormat)
 
 	depositor, fetchErr := fetchCaller(ctx, csm, act.Amount())
 	if fetchErr != nil {
-		lol.Error("fetchCaller", zap.Error(fetchErr))
 		return log, nil, fetchErr
 	}
-	lol.Info("fetchCaller", zap.Any("caller", depositor))
 
 	bucket, fetchErr := p.fetchBucketAndValidate(featureCtx, csm, actionCtx.Caller, act.BucketIndex(), false, true)
 	if fetchErr != nil {
-		lol.Error("fetchBucketAndValidate", zap.Error(fetchErr))
 		return log, nil, fetchErr
 	}
-	lol.Info("fetchBucketAndValidate", zap.Any("bucket", bucket))
 	log.AddTopics(byteutil.Uint64ToBytesBigEndian(bucket.Index), bucket.Owner.Bytes(), bucket.Candidate.Bytes())
 	if !bucket.AutoStake {
-		lol.Error("deposit is only allowed on auto-stake bucket")
 		return log, nil, &handleError{
 			err:           errors.New("deposit is only allowed on auto-stake bucket"),
 			failureStatus: iotextypes.ReceiptStatus_ErrInvalidBucketType,
@@ -502,13 +494,10 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 	}
 	candidate := csm.GetByOwner(bucket.Candidate)
 	if candidate == nil {
-		lol.Error("candidate not found")
 		return log, nil, errCandNotExist
 	}
-	lol.Info("csm.GetByOwner", zap.Any("candidate", candidate))
 
 	if featureCtx.CannotUnstakeAgain && bucket.isUnstaked() {
-		lol.Error("deposit to an unstaked bucket not allowed")
 		return log, nil, &handleError{
 			err:           errors.New("deposit to an unstaked bucket not allowed"),
 			failureStatus: iotextypes.ReceiptStatus_ErrInvalidBucketType,
@@ -516,24 +505,20 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 	}
 	selfStake, err := isSelfStakeBucket(featureCtx, csm, bucket)
 	if err != nil {
-		lol.Error("isSelfStakeBucket", zap.Error(err))
 		return log, nil, &handleError{
 			err:           err,
 			failureStatus: iotextypes.ReceiptStatus_ErrUnknown,
 		}
 	}
-	lol.Info("isSelfStakeBucket", zap.Bool("selfStake", selfStake))
 	prevWeightedVotes := p.calculateVoteWeight(bucket, selfStake)
 	// update bucket
 	bucket.StakedAmount.Add(bucket.StakedAmount, act.Amount())
 	if err := csm.updateBucket(act.BucketIndex(), bucket); err != nil {
-		lol.Error("updateBucket", zap.Error(err))
 		return log, nil, errors.Wrapf(err, "failed to update bucket for voter %s", bucket.Owner.String())
 	}
 
 	// update candidate
 	if err := candidate.SubVote(prevWeightedVotes); err != nil {
-		lol.Error("SubVote", zap.Error(err))
 		return log, nil, &handleError{
 			err:           errors.Wrapf(err, "failed to subtract vote for candidate %s", bucket.Candidate.String()),
 			failureStatus: iotextypes.ReceiptStatus_ErrNotEnoughBalance,
@@ -541,7 +526,6 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 	}
 	weightedVotes := p.calculateVoteWeight(bucket, selfStake)
 	if err := candidate.AddVote(weightedVotes); err != nil {
-		lol.Error("AddVote", zap.Error(err))
 		return log, nil, &handleError{
 			err:           errors.Wrapf(err, "failed to add vote for candidate %s", candidate.Owner.String()),
 			failureStatus: iotextypes.ReceiptStatus_ErrInvalidBucketAmount,
@@ -549,7 +533,6 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 	}
 	if selfStake {
 		if err := candidate.AddSelfStake(act.Amount()); err != nil {
-			lol.Error("AddSelfStake", zap.Error(err))
 			return log, nil, &handleError{
 				err:           errors.Wrapf(err, "failed to add self stake for candidate %s", candidate.Owner.String()),
 				failureStatus: iotextypes.ReceiptStatus_ErrInvalidBucketAmount,
@@ -557,13 +540,11 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 		}
 	}
 	if err := csm.Upsert(candidate); err != nil {
-		lol.Error("Upsert", zap.Error(err))
 		return log, nil, csmErrorToHandleError(candidate.Owner.String(), err)
 	}
 
 	// update bucket pool
 	if err := csm.DebitBucketPool(act.Amount(), false); err != nil {
-		lol.Error("DebitBucketPool", zap.Error(err))
 		return log, nil, &handleError{
 			err:           errors.Wrapf(err, "failed to update staking bucket pool %s", err.Error()),
 			failureStatus: iotextypes.ReceiptStatus_ErrWriteAccount,
@@ -572,7 +553,6 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 
 	// update depositor balance
 	if err := depositor.SubBalance(act.Amount()); err != nil {
-		lol.Error("SubBalance", zap.Error(err))
 		return log, nil, &handleError{
 			err:           errors.Wrapf(err, "failed to update the balance of depositor %s", actionCtx.Caller.String()),
 			failureStatus: iotextypes.ReceiptStatus_ErrNotEnoughBalance,
@@ -580,7 +560,6 @@ func (p *Protocol) handleDepositToStake(ctx context.Context, act *action.Deposit
 	}
 	// put updated depositor's account state to trie
 	if err := accountutil.StoreAccount(csm.SM(), actionCtx.Caller, depositor); err != nil {
-		lol.Error("StoreAccount", zap.Error(err))
 		return log, nil, errors.Wrapf(err, "failed to store account %s", actionCtx.Caller.String())
 	}
 	log.AddAddress(actionCtx.Caller)

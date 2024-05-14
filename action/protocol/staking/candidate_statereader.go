@@ -10,14 +10,12 @@ import (
 	"math/big"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/iotexproject/iotex-address/address"
 	"github.com/iotexproject/iotex-proto/golang/iotexapi"
 	"github.com/iotexproject/iotex-proto/golang/iotextypes"
 
 	"github.com/iotexproject/iotex-core/action/protocol"
-	"github.com/iotexproject/iotex-core/pkg/log"
 	"github.com/iotexproject/iotex-core/state"
 )
 
@@ -326,7 +324,7 @@ func (c *candSR) getAllCandidates() (CandidateList, uint64, error) {
 		}
 		cands = append(cands, c)
 	}
-	log.L().Info("getAllCandidates", zap.Int("size", len(cands)), zap.Uint64("height", height))
+	// log.L().Info("getAllCandidates", zap.Int("size", len(cands)), zap.Uint64("height", height))
 	return cands, height, nil
 }
 
