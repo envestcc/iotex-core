@@ -179,12 +179,12 @@ func dbCompare() (err error) {
 			keyNum := b.Stats().KeyN
 			fmt.Printf("compare namespace: %s %d\n", name, keyNum)
 			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
-			b.ForEach(func(k, v []byte) error {
+			err = b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
 				if err := bar.Add(1); err != nil {
-					return errors.Wrap(err, "failed to add progress bar")
+					fmt.Printf("failed to update processbar %s\n", err)
 				}
 				var (
 					value []byte
@@ -209,6 +209,9 @@ func dbCompare() (err error) {
 				}
 				return nil
 			})
+			if err != nil {
+				return err
+			}
 			if err := bar.Finish(); err != nil {
 				return err
 			}
