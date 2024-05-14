@@ -259,6 +259,7 @@ func statedb2FactoryV2() (err error) {
 	}
 
 	size := 200000
+	trieMaxSize := 20000000
 	// open statedb
 	statedb, err := bbolt.Open(statedbFile, 0666, &bbolt.Options{ReadOnly: true})
 	if err != nil {
@@ -331,7 +332,8 @@ func statedb2FactoryV2() (err error) {
 	if err != nil {
 		return err
 	}
-	wss, err := factory.NewFactoryWorkingSetStore(nil, flusher, cache.NewThreadSafeLruCache(1000))
+	wssCache := cache.NewThreadSafeLruCache(1000)
+	wss, err := factory.NewFactoryWorkingSetStore(nil, flusher, wssCache)
 	if err != nil {
 		return err
 	}
@@ -346,11 +348,13 @@ func statedb2FactoryV2() (err error) {
 		fmt.Printf("stop wss end time %s\n", time.Now().Format(time.RFC3339))
 	}()
 
+	trieSize := uint64(0)
 	bat := batch.NewBatch()
 	writeBatch := func(bat batch.KVStoreBatch) error {
 		if err = factorydb.WriteBatch(bat); err != nil {
 			return errors.Wrap(err, "failed to write batch")
 		}
+		trieSize += uint64(bat.Size())
 		for i := 0; i < bat.Size(); i++ {
 			e, err := bat.Entry(i)
 			if err != nil {
@@ -362,7 +366,24 @@ func statedb2FactoryV2() (err error) {
 				wss.Put(e.Namespace(), e.Key(), e.Value())
 			}
 		}
-		return wss.Commit()
+		if err = wss.Commit(); err != nil {
+			return errors.Wrap(err, "failed to commit")
+		}
+		if trieSize >= uint64(trieMaxSize) {
+			if err = wss.Stop(context.Background()); err != nil {
+				return errors.Wrap(err, "failed to stop wss")
+			}
+			wss, err = factory.NewFactoryWorkingSetStore(nil, flusher, wssCache)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("start new working set store\n")
+			if err = wss.Start(context.Background()); err != nil {
+				return errors.Wrap(err, "failed to start db for trie")
+			}
+			trieSize = 0
+		}
+		return nil
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
