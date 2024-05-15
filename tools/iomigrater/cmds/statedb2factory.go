@@ -74,6 +74,7 @@ var (
 	v2          = false
 	namespaces  = []string{}
 	trieMaxSize = 10000000
+	notStatsNS  = []string{}
 )
 
 func init() {
@@ -83,6 +84,7 @@ func init() {
 	StateDB2Factory.PersistentFlags().BoolVarP(&v2, "v2", "2", false, "Use workingSet to convert")
 	StateDB2Factory.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "Namespaces to migrate")
 	StateDB2Factory.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
+	StateDB2Factory.PersistentFlags().StringSliceVarP(&notStatsNS, "nostats", "", []string{}, "Namespaces not to stats")
 }
 
 func statedb2Factory() (err error) {
@@ -374,7 +376,6 @@ func statedb2FactoryV2() (err error) {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("start new working set store\n")
 			if err = wss.Start(context.Background()); err != nil {
 				return errors.Wrap(err, "failed to start db for trie")
 			}
@@ -392,17 +393,28 @@ func statedb2FactoryV2() (err error) {
 				fmt.Printf("skip ns %s\n", name)
 				return nil
 			}
-			keyNum := b.Stats().KeyN
-			fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
-			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
+
+			keyNum := 1000000
+			noStats := slices.Index(notStatsNS, string(name)) >= 0
+			if !noStats {
+				keyNum = b.Stats().KeyN
+				fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
+			} else {
+				fmt.Printf("migrating namespace: %s unknown\n", name)
+			}
+			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount())
+			realKeyNum := 0
 			err = b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
 				}
+				realKeyNum++
 				bat.Put(string(name), k, v, "failed to put")
 				if uint32(bat.Size()) >= uint32(size) {
-					if err := bar.Add(slices.Min([]int{bat.Size(), keyNum})); err != nil {
-						fmt.Printf("failed to add progress bar %v\n", err)
+					if err := bar.Add(bat.Size()); err != nil {
+						// fmt.Printf("failed to add progress bar %v\n", err)
+						keyNum *= 2
+						bar.ChangeMax(keyNum)
 					}
 					if err = writeBatch(bat); err != nil {
 						return err
@@ -414,9 +426,21 @@ func statedb2FactoryV2() (err error) {
 			if err != nil {
 				return err
 			}
-			if err := bar.Finish(); err != nil {
+			if noStats {
+				bar.ChangeMax(realKeyNum)
+			}
+			// write bucket remaining data
+			if err := bar.Add(bat.Size()); err != nil {
+				fmt.Printf("failed to add progress bar %v\n", err)
+			}
+			if err = writeBatch(bat); err != nil {
 				return err
 			}
+			bat = batch.NewBatch()
+			if err := bar.Finish(); err != nil {
+				fmt.Printf("failed to finish progress bar %v\n", err)
+			}
+
 			fmt.Println()
 			return nil
 		}); err != nil {
