@@ -79,6 +79,7 @@ func init() {
 	DBCompare.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "namespaces to compare")
 	DBCompare.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
 	DBCompare.PersistentFlags().StringSliceVarP(&notStatsNS, "nostats", "", []string{}, "Namespaces not to stats")
+	DBCompare.PersistentFlags().StringVarP(&diffFile, "diff", "d", "", "Diff file")
 }
 
 func dbCompare() (err error) {
@@ -170,7 +171,60 @@ func dbCompare() (err error) {
 	unmatchs := [][][]byte{}
 	trieSize := uint64(0)
 	if err := statedb.View(func(tx *bbolt.Tx) error {
-		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+		if len(diffFile) > 0 {
+			bar := progressbar.NewOptions(1000000, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
+			index := 0
+			err := foreachFile(diffFile, func(d *diff) error {
+				index++
+				if index >= bar.GetMax() {
+					bar.ChangeMax(index * 3)
+				}
+				if err := bar.Add(1); err != nil {
+					fmt.Printf("failed to update processbar %s\n", err)
+				}
+				if index < diffStart {
+					return nil
+				}
+				if trieSize > uint64(trieMaxSize) {
+					if err = wss.Stop(context.Background()); err != nil {
+						return errors.Wrap(err, "failed to stop db for trie")
+					}
+					wss, err := factory.NewFactoryWorkingSetStore(nil, flusher, cache.NewThreadSafeLruCache(1000))
+					if err != nil {
+						return err
+					}
+					if err = wss.Start(context.Background()); err != nil {
+						return errors.Wrap(err, "failed to start db for trie")
+					}
+					trieSize = 0
+				}
+				bt := tx.Bucket([]byte(d.ns))
+				if bt == nil {
+					return errors.Errorf("bucket not found: %s", d.ns)
+				}
+				val := bt.Get(d.key)
+				if val == nil {
+					return errors.Errorf("key not found: ns %s key %x", d.ns, d.key)
+				}
+				trieSize++
+				val2, err := wss.Get(d.ns, d.key)
+				if err != nil {
+					notfounds = append(notfounds, [][]byte{[]byte(d.ns), d.key})
+					return nil
+				}
+				if !bytes.Equal(val, val2) {
+					unmatchs = append(unmatchs, [][]byte{[]byte(d.ns), d.key, val})
+					return nil
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			bar.ChangeMax(index)
+			bar.Finish()
+			fmt.Println()
+		} else if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
 				fmt.Printf("skip ns %s\n", name)
 				return nil

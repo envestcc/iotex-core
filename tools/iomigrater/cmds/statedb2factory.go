@@ -81,6 +81,7 @@ var (
 	trieMaxSize = 10000000
 	notStatsNS  = []string{}
 	diffFile    = ""
+	diffStart   = 0
 )
 
 func init() {
@@ -92,6 +93,7 @@ func init() {
 	StateDB2Factory.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
 	StateDB2Factory.PersistentFlags().StringSliceVarP(&notStatsNS, "nostats", "", []string{}, "Namespaces not to stats")
 	StateDB2Factory.PersistentFlags().StringVarP(&diffFile, "diff", "d", "", "Diff file")
+	StateDB2Factory.PersistentFlags().IntVarP(&diffStart, "diffstart", "", 0, "Diff start")
 }
 
 func statedb2Factory() (err error) {
@@ -392,34 +394,44 @@ func statedb2FactoryV2() (err error) {
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if len(diffFile) > 0 {
-			diffs, err := parseFile(diffFile)
-			if err != nil {
-				return err
-			}
-			bar := progressbar.NewOptions(len(diffs), progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
-			for _, diff := range diffs {
-				bt := tx.Bucket([]byte(diff.ns))
+			bar := progressbar.NewOptions(1000000, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
+			index := 0
+			err := foreachFile(diffFile, func(d *diff) error {
+				index++
+				if index < diffStart {
+					return nil
+				}
+				bt := tx.Bucket([]byte(d.ns))
 				if bt == nil {
-					return errors.Errorf("bucket not found: %s", diff.ns)
+					return errors.Errorf("bucket not found: %s", d.ns)
 				}
-				val := bt.Get(diff.key)
+				val := bt.Get(d.key)
 				if val == nil {
-					return errors.Errorf("key not found: ns %s key %x", diff.ns, diff.key)
+					return errors.Errorf("key not found: ns %s key %x", d.ns, d.key)
 				}
-				bat.Put(diff.ns, diff.key, val, "failed to put")
+				bat.Put(d.ns, d.key, val, "failed to put")
 				if bat.Size() >= size {
+					if index >= bar.GetMax() {
+						bar.ChangeMax(index * 3)
+					}
 					bar.Add(bat.Size())
 					if err := writeBatch(bat); err != nil {
 						return err
 					}
 					bat = batch.NewBatch()
 				}
+				return nil
+			})
+			if err != nil {
+				return err
 			}
+			bar.ChangeMax(index)
 			if bat.Size() > 0 {
 				if err := writeBatch(bat); err != nil {
 					return err
 				}
 			}
+			bar.Finish()
 		} else if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
 				fmt.Printf("skip ns %s\n", name)
@@ -507,17 +519,17 @@ type diff struct {
 	key []byte
 }
 
-func parseFile(path string) ([]diff, error) {
+func foreachFile(path string, fn func(*diff) error) error {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer file.Close()
 
-	return parseReader(file)
+	return foreachReader(file, fn)
 }
 
-func parseReader(r io.Reader) ([]diff, error) {
+func foreachReader(r io.Reader, fn func(*diff) error) error {
 	scanner := bufio.NewScanner(r)
 	// Set the maximum token size to 1GB.
 	const maxTokenSize = 1 * 1024 * 1024 * 1024
@@ -525,7 +537,6 @@ func parseReader(r io.Reader) ([]diff, error) {
 	scanner.Buffer(buf, maxTokenSize)
 
 	re := regexp.MustCompile(`(not found|unmatch): ns (\S+) key (\S+)`)
-	var matches []diff
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -533,15 +544,13 @@ func parseReader(r io.Reader) ([]diff, error) {
 		if match != nil {
 			key, err := hex.DecodeString(match[3])
 			if err != nil {
-				return nil, err
+				return err
 			}
-			matches = append(matches, diff{ns: match[2], key: key})
+			if err = fn(&diff{ns: match[2], key: key}); err != nil {
+				return err
+			}
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return matches, nil
+	return scanner.Err()
 }
