@@ -519,6 +519,11 @@ func parseFile(path string) ([]diff, error) {
 
 func parseReader(r io.Reader) ([]diff, error) {
 	scanner := bufio.NewScanner(r)
+	// Set the maximum token size to 1GB.
+	const maxTokenSize = 1 * 1024 * 1024 * 1024
+	buf := make([]byte, maxTokenSize)
+	scanner.Buffer(buf, maxTokenSize)
+
 	re := regexp.MustCompile(`(not found|unmatch): ns (\S+) key (\S+)`)
 	var matches []diff
 
