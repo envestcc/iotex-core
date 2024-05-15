@@ -364,6 +364,9 @@ func statedb2FactoryV2() (err error) {
 			return errors.Wrap(err, "failed to commit")
 		}
 		if trieSize >= uint64(trieMaxSize) {
+			if err = wss.Finalize(height); err != nil {
+				return errors.Wrap(err, "failed to finalize")
+			}
 			if err = wss.Stop(context.Background()); err != nil {
 				return errors.Wrap(err, "failed to stop wss")
 			}
