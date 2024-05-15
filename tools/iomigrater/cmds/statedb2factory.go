@@ -394,7 +394,7 @@ func statedb2FactoryV2() (err error) {
 				return nil
 			}
 
-			keyNum := 1000000
+			keyNum := 300000
 			noStats := slices.Index(notStatsNS, string(name)) >= 0
 			if !noStats {
 				keyNum = b.Stats().KeyN
@@ -402,7 +402,7 @@ func statedb2FactoryV2() (err error) {
 			} else {
 				fmt.Printf("migrating namespace: %s unknown\n", name)
 			}
-			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount())
+			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
 			realKeyNum := 0
 			err = b.ForEach(func(k, v []byte) error {
 				if v == nil {
@@ -411,10 +411,11 @@ func statedb2FactoryV2() (err error) {
 				realKeyNum++
 				bat.Put(string(name), k, v, "failed to put")
 				if uint32(bat.Size()) >= uint32(size) {
+					if realKeyNum >= bar.GetMax() {
+						bar.ChangeMax(realKeyNum * 3)
+					}
 					if err := bar.Add(bat.Size()); err != nil {
-						// fmt.Printf("failed to add progress bar %v\n", err)
-						keyNum *= 2
-						bar.ChangeMax(keyNum)
+						fmt.Printf("failed to add progress bar %v\n", err)
 					}
 					if err = writeBatch(bat); err != nil {
 						return err
