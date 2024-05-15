@@ -77,6 +77,7 @@ func init() {
 	DBCompare.PersistentFlags().StringVarP(&statedbFile, "statedb", "s", "", common.TranslateInLang(stateDB2FactoryFlagStateDBFileUse))
 	DBCompare.PersistentFlags().StringVarP(&factoryFile, "factory", "f", "", common.TranslateInLang(stateDB2FactoryFlagFactoryFileUse))
 	DBCompare.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "namespaces to compare")
+	DBCompare.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
 }
 
 func dbCompare() (err error) {
@@ -166,6 +167,7 @@ func dbCompare() (err error) {
 	}()
 	notfounds := [][][]byte{}
 	unmatchs := [][][]byte{}
+	trieSize := uint64(0)
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
@@ -185,6 +187,20 @@ func dbCompare() (err error) {
 				}
 				if err := bar.Add(1); err != nil {
 					fmt.Printf("failed to update processbar %s\n", err)
+				}
+				trieSize++
+				if trieSize > uint64(trieMaxSize) {
+					if err = wss.Stop(context.Background()); err != nil {
+						return errors.Wrap(err, "failed to stop db for trie")
+					}
+					wss, err := factory.NewFactoryWorkingSetStore(nil, flusher, cache.NewThreadSafeLruCache(1000))
+					if err != nil {
+						return err
+					}
+					if err = wss.Start(context.Background()); err != nil {
+						return errors.Wrap(err, "failed to start db for trie")
+					}
+					trieSize = 0
 				}
 				var (
 					value []byte
