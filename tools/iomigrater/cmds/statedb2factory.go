@@ -1,10 +1,15 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"regexp"
 	"slices"
 	"time"
 
@@ -75,6 +80,7 @@ var (
 	namespaces  = []string{}
 	trieMaxSize = 10000000
 	notStatsNS  = []string{}
+	diffFile    = ""
 )
 
 func init() {
@@ -85,6 +91,7 @@ func init() {
 	StateDB2Factory.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "Namespaces to migrate")
 	StateDB2Factory.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
 	StateDB2Factory.PersistentFlags().StringSliceVarP(&notStatsNS, "nostats", "", []string{}, "Namespaces not to stats")
+	StateDB2Factory.PersistentFlags().StringVarP(&diffFile, "diff", "d", "", "Diff file")
 }
 
 func statedb2Factory() (err error) {
@@ -384,7 +391,36 @@ func statedb2FactoryV2() (err error) {
 		return nil
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
-		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+		if len(diffFile) > 0 {
+			diffs, err := parseFile(diffFile)
+			if err != nil {
+				return err
+			}
+			bar := progressbar.NewOptions(len(diffs), progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
+			for _, diff := range diffs {
+				bt := tx.Bucket([]byte(diff.ns))
+				if bt == nil {
+					return errors.Errorf("bucket not found: %s", diff.ns)
+				}
+				val := bt.Get(diff.key)
+				if val == nil {
+					return errors.Errorf("key not found: ns %s key %x", diff.ns, diff.key)
+				}
+				bat.Put(diff.ns, diff.key, val, "failed to put")
+				if bat.Size() >= size {
+					bar.Add(bat.Size())
+					if err := writeBatch(bat); err != nil {
+						return err
+					}
+					bat = batch.NewBatch()
+				}
+			}
+			if bat.Size() > 0 {
+				if err := writeBatch(bat); err != nil {
+					return err
+				}
+			}
+		} else if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
 				fmt.Printf("skip ns %s\n", name)
 				return nil
@@ -393,7 +429,6 @@ func statedb2FactoryV2() (err error) {
 				fmt.Printf("skip ns %s\n", name)
 				return nil
 			}
-
 			keyNum := 1000000
 			noStats := slices.Index(notStatsNS, string(name)) >= 0
 			if !noStats {
@@ -465,4 +500,43 @@ func statedb2FactoryV2() (err error) {
 		return errors.Wrap(err, "failed to commit")
 	}
 	return nil
+}
+
+type diff struct {
+	ns  string
+	key []byte
+}
+
+func parseFile(path string) ([]diff, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	return parseReader(file)
+}
+
+func parseReader(r io.Reader) ([]diff, error) {
+	scanner := bufio.NewScanner(r)
+	re := regexp.MustCompile(`(not found|unmatch): ns (\S+) key (\S+)`)
+	var matches []diff
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		match := re.FindStringSubmatch(line)
+		if match != nil {
+			key, err := hex.DecodeString(match[3])
+			if err != nil {
+				return nil, err
+			}
+			matches = append(matches, diff{ns: match[2], key: key})
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return matches, nil
 }

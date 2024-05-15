@@ -183,9 +183,9 @@ func dbCompare() (err error) {
 			noStats := slices.Index(notStatsNS, string(name)) >= 0
 			if !noStats {
 				keyNum = b.Stats().KeyN
-				fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
+				fmt.Printf("compare namespace: %s %d\n", name, keyNum)
 			} else {
-				fmt.Printf("migrating namespace: %s unknown\n", name)
+				fmt.Printf("compare namespace: %s unknown\n", name)
 			}
 			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
 			realKeyNum := 0
