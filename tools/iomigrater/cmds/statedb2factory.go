@@ -411,7 +411,7 @@ func statedb2FactoryV2() (err error) {
 				realKeyNum++
 				bat.Put(string(name), k, v, "failed to put")
 				if uint32(bat.Size()) >= uint32(size) {
-					if realKeyNum >= bar.GetMax() {
+					if noStats && realKeyNum >= bar.GetMax() {
 						bar.ChangeMax(realKeyNum * 3)
 					}
 					if err := bar.Add(bat.Size()); err != nil {

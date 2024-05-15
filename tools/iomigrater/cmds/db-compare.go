@@ -78,6 +78,7 @@ func init() {
 	DBCompare.PersistentFlags().StringVarP(&factoryFile, "factory", "f", "", common.TranslateInLang(stateDB2FactoryFlagFactoryFileUse))
 	DBCompare.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "namespaces to compare")
 	DBCompare.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
+	DBCompare.PersistentFlags().StringSliceVarP(&notStatsNS, "nostats", "", []string{}, "Namespaces not to stats")
 }
 
 func dbCompare() (err error) {
@@ -178,12 +179,23 @@ func dbCompare() (err error) {
 				fmt.Printf("skip namespace %s\n", name)
 				return nil
 			}
-			keyNum := b.Stats().KeyN
-			fmt.Printf("compare namespace: %s %d\n", name, keyNum)
-			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Second))
+			keyNum := 1000000
+			noStats := slices.Index(notStatsNS, string(name)) >= 0
+			if !noStats {
+				keyNum = b.Stats().KeyN
+				fmt.Printf("migrating namespace: %s %d\n", name, keyNum)
+			} else {
+				fmt.Printf("migrating namespace: %s unknown\n", name)
+			}
+			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
+			realKeyNum := 0
 			err = b.ForEach(func(k, v []byte) error {
 				if v == nil {
 					panic("unexpected nested bucket")
+				}
+				realKeyNum++
+				if noStats && realKeyNum >= bar.GetMax() {
+					bar.ChangeMax(realKeyNum * 3)
 				}
 				if err := bar.Add(1); err != nil {
 					fmt.Printf("failed to update processbar %s\n", err)
@@ -227,6 +239,9 @@ func dbCompare() (err error) {
 			})
 			if err != nil {
 				return err
+			}
+			if noStats {
+				bar.ChangeMax(realKeyNum)
 			}
 			if err := bar.Finish(); err != nil {
 				return err
