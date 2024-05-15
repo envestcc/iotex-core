@@ -394,7 +394,7 @@ func statedb2FactoryV2() (err error) {
 				return nil
 			}
 
-			keyNum := 300000
+			keyNum := 1000000
 			noStats := slices.Index(notStatsNS, string(name)) >= 0
 			if !noStats {
 				keyNum = b.Stats().KeyN
