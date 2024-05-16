@@ -371,13 +371,13 @@ func statedb2FactoryV2() (err error) {
 				wss.Put(e.Namespace(), e.Key(), e.Value())
 			}
 		}
+		if err = wss.Finalize(height); err != nil {
+			return errors.Wrap(err, "failed to finalize")
+		}
 		if err = wss.Commit(); err != nil {
 			return errors.Wrap(err, "failed to commit")
 		}
 		if trieSize >= uint64(trieMaxSize) {
-			if err = wss.Finalize(height); err != nil {
-				return errors.Wrap(err, "failed to finalize")
-			}
 			if err = wss.Stop(context.Background()); err != nil {
 				return errors.Wrap(err, "failed to stop wss")
 			}
