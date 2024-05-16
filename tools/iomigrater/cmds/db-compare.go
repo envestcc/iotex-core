@@ -209,9 +209,6 @@ func dbCompare() (err error) {
 				trieSize++
 				val2, err := wss.Get(d.ns, d.key)
 				if err != nil {
-					if !errors.Is(err, db.ErrNotExist) {
-						fmt.Printf("ns %s key %x get error %s\n", d.ns, d.key, err)
-					}
 					notfounds = append(notfounds, [][]byte{[]byte(d.ns), d.key})
 					return nil
 				}
