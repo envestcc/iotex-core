@@ -77,7 +77,7 @@ func init() {
 	DBCompare.PersistentFlags().StringVarP(&statedbFile, "statedb", "s", "", common.TranslateInLang(stateDB2FactoryFlagStateDBFileUse))
 	DBCompare.PersistentFlags().StringVarP(&factoryFile, "factory", "f", "", common.TranslateInLang(stateDB2FactoryFlagFactoryFileUse))
 	DBCompare.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "namespaces to compare")
-	DBCompare.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
+	DBCompare.PersistentFlags().Uint64VarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
 	DBCompare.PersistentFlags().StringSliceVarP(&notStatsNS, "nostats", "", []string{}, "Namespaces not to stats")
 	DBCompare.PersistentFlags().StringVarP(&diffFile, "diff", "d", "", "Diff file")
 }
