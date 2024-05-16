@@ -377,19 +377,19 @@ func statedb2FactoryV2() (err error) {
 		if err = wss.Commit(); err != nil {
 			return errors.Wrap(err, "failed to commit")
 		}
-		if trieSize >= uint64(trieMaxSize) {
-			if err = wss.Stop(context.Background()); err != nil {
-				return errors.Wrap(err, "failed to stop wss")
-			}
-			wss, err = factory.NewFactoryWorkingSetStore(nil, flusher, wssCache)
-			if err != nil {
-				return err
-			}
-			if err = wss.Start(context.Background()); err != nil {
-				return errors.Wrap(err, "failed to start db for trie")
-			}
-			trieSize = 0
+		// if trieSize >= uint64(trieMaxSize) {
+		if err = wss.Stop(context.Background()); err != nil {
+			return errors.Wrap(err, "failed to stop wss")
 		}
+		wss, err = factory.NewFactoryWorkingSetStore(nil, flusher, wssCache)
+		if err != nil {
+			return err
+		}
+		if err = wss.Start(context.Background()); err != nil {
+			return errors.Wrap(err, "failed to start db for trie")
+		}
+		trieSize = 0
+		// }
 		return nil
 	}
 	if err := statedb.View(func(tx *bbolt.Tx) error {
