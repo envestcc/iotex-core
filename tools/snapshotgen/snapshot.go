@@ -97,8 +97,8 @@ func genSnapshot(index int) error {
 }
 
 func genSnapshotConfig(index int) (string, string, error) {
-	configPath := fmt.Sprintf("config-snapshot-%d.yaml", index)
-	genesisPath := fmt.Sprintf("genesis-snapshot-%d.yaml", index)
+	configPath := fmt.Sprintf("config-snapshot-%dm.yaml", index)
+	genesisPath := fmt.Sprintf("genesis-snapshot-%dm.yaml", index)
 	// TODO: generate config and genesis files
 	// Create a new template and parse the template into it
 	t := template.Must(template.New("SnapshotConfig").Parse(configTmpl))
@@ -132,7 +132,7 @@ func genSnapshotConfig(index int) (string, string, error) {
 }
 
 func snapshotHeight(index int) uint64 {
-	start := index*archiveSnapshotCapacity - archiveSnapshotReserve
+	start := (index+1)*archiveSnapshotCapacity + archiveSnapshotReserve
 	if start <= 0 {
 		return 1
 	}
