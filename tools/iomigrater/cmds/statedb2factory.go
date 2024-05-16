@@ -368,7 +368,9 @@ func statedb2FactoryV2() (err error) {
 			if e.Namespace() == factory.AccountKVNamespace && string(e.Key()) == factory.CurrentHeightKey {
 				height = byteutil.BytesToUint64(e.Value())
 			} else {
-				wss.Put(e.Namespace(), e.Key(), e.Value())
+				if err = wss.Put(e.Namespace(), e.Key(), e.Value()); err != nil {
+					return errors.Wrapf(err, "failed to put %s %x", e.Namespace(), e.Key())
+				}
 			}
 		}
 		if err = wss.Finalize(height); err != nil {
