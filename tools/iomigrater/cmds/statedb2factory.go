@@ -78,7 +78,7 @@ var (
 	outAsPebble = false
 	v2          = false
 	namespaces  = []string{}
-	trieMaxSize = 10000000
+	trieMaxSize = uint64(1024 * 1024 * 1024) // 1GB as default
 	notStatsNS  = []string{}
 	diffFile    = ""
 	diffStart   = 0
@@ -90,7 +90,7 @@ func init() {
 	StateDB2Factory.PersistentFlags().BoolVarP(&outAsPebble, "pebbledb", "p", false, "Output as pebbledb")
 	StateDB2Factory.PersistentFlags().BoolVarP(&v2, "v2", "2", false, "Use workingSet to convert")
 	StateDB2Factory.PersistentFlags().StringSliceVarP(&namespaces, "namespaces", "n", []string{}, "Namespaces to migrate")
-	StateDB2Factory.PersistentFlags().IntVarP(&trieMaxSize, "trieMaxSize", "m", 10000000, "Max size of trie")
+	StateDB2Factory.PersistentFlags().Uint64VarP(&trieMaxSize, "trieMaxSize", "m", 1024*1024*1024, "Max size of trie")
 	StateDB2Factory.PersistentFlags().StringSliceVarP(&notStatsNS, "nostats", "", []string{}, "Namespaces not to stats")
 	StateDB2Factory.PersistentFlags().StringVarP(&diffFile, "diff", "d", "", "Diff file")
 	StateDB2Factory.PersistentFlags().IntVarP(&diffStart, "diffstart", "", 0, "Diff start")
@@ -356,10 +356,6 @@ func statedb2FactoryV2() (err error) {
 	trieSize := uint64(0)
 	bat := batch.NewBatch()
 	writeBatch := func(bat batch.KVStoreBatch) error {
-		// if err = factorydb.WriteBatch(bat); err != nil {
-		// 	return errors.Wrap(err, "failed to write batch")
-		// }
-		trieSize += uint64(bat.Size())
 		for i := 0; i < bat.Size(); i++ {
 			e, err := bat.Entry(i)
 			if err != nil {
@@ -459,7 +455,8 @@ func statedb2FactoryV2() (err error) {
 				}
 				realKeyNum++
 				bat.Put(string(name), k, v, "failed to put")
-				if uint32(bat.Size()) >= uint32(size) {
+				trieSize += uint64(len(v) + len(k))
+				if uint32(bat.Size()) >= uint32(size) || trieSize >= trieMaxSize {
 					if noStats && realKeyNum >= bar.GetMax() {
 						bar.ChangeMax(realKeyNum * 3)
 					}
