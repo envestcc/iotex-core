@@ -78,16 +78,17 @@ var (
 )
 
 var (
-	statedbFile  = ""
-	factoryFile  = ""
-	outAsPebble  = false
-	v2           = false
-	namespaces   = []string{}
-	trieMaxSize  = uint64(1024 * 1024 * 1024) // 1GB as default
-	notStatsNS   = []string{}
-	diffFile     = ""
-	diffStart    = 0
-	progressFile = "progress.txt"
+	statedbFile       = ""
+	factoryFile       = ""
+	outAsPebble       = false
+	v2                = false
+	namespaces        = []string{}
+	trieMaxSize       = uint64(1024 * 1024 * 1024) // 1GB as default
+	notStatsNS        = []string{}
+	diffFile          = ""
+	diffStart         = 0
+	progressFile      = "progress.txt"
+	isUpgradeProgress = false
 
 	stopped  atomic.Bool
 	progress *convertProgress
@@ -104,6 +105,7 @@ func init() {
 	StateDB2Factory.PersistentFlags().StringVarP(&diffFile, "diff", "d", "", "Diff file")
 	StateDB2Factory.PersistentFlags().IntVarP(&diffStart, "diffstart", "", 0, "Diff start")
 	StateDB2Factory.PersistentFlags().StringVarP(&progressFile, "progress", "", "progress.txt", "Progress file")
+	StateDB2Factory.PersistentFlags().BoolVarP(&isUpgradeProgress, "upgrade", "", false, "Upgrade progress file to v2")
 }
 
 func statedb2Factory() (err error) {
@@ -280,7 +282,7 @@ func statedb2Factory() (err error) {
 
 type convertProgress struct {
 	finished   []string
-	inProgress map[string]uint64
+	inProgress map[string][]byte
 	rws        interface {
 		io.ReadWriteSeeker
 		Truncate(size int64) error
@@ -292,7 +294,7 @@ func newConvertProgress(rws interface {
 	Truncate(size int64) error
 }) *convertProgress {
 	return &convertProgress{
-		inProgress: make(map[string]uint64),
+		inProgress: make(map[string][]byte),
 		finished:   make([]string, 0),
 		rws:        rws,
 	}
@@ -302,21 +304,13 @@ func (p *convertProgress) nsFinished(ns string) bool {
 	return slices.Contains(p.finished, ns)
 }
 
-func (p *convertProgress) processed(ns string, id uint64) bool {
-	if slices.Contains(p.finished, ns) {
-		return true
-	}
-	if count, ok := p.inProgress[ns]; ok {
-		if id < count {
-			return true
-		}
-	}
-	return false
+func (p *convertProgress) progress(ns string) []byte {
+	return p.inProgress[ns]
 
 }
 
-func (p *convertProgress) add(ns string, count uint64) {
-	p.inProgress[ns] += count
+func (p *convertProgress) set(ns string, key []byte) {
+	p.inProgress[ns] = key
 }
 
 func (p *convertProgress) finish(ns string) {
@@ -345,7 +339,7 @@ func (p *convertProgress) commit() {
 	}
 
 	for key, value := range p.inProgress {
-		_, err := fmt.Fprintf(p.rws, "%v: %v\n", key, value)
+		_, err := fmt.Fprintf(p.rws, "%v: %v\n", key, hex.EncodeToString(value))
 		if err != nil {
 			fmt.Printf("error writing to file: %v\n", err)
 			return
@@ -367,8 +361,81 @@ func (p *convertProgress) load() {
 
 		if key == "finished" {
 			p.finished = append(p.finished, value)
-		} else if count, err := strconv.ParseUint(value, 10, 64); err == nil {
-			p.inProgress[key] = count
+		} else if k, err := hex.DecodeString(value); err == nil {
+			p.inProgress[key] = k
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("error reading file: %v\n", err)
+	}
+}
+
+type convertProgressV1 struct {
+	finished   []string
+	inProgress map[string]uint64
+	rws        interface {
+		io.ReadWriteSeeker
+		Truncate(size int64) error
+	}
+}
+
+func newConvertProgressV1(rws interface {
+	io.ReadWriteSeeker
+	Truncate(size int64) error
+}) *convertProgressV1 {
+	return &convertProgressV1{
+		inProgress: make(map[string]uint64),
+		finished:   make([]string, 0),
+		rws:        rws,
+	}
+}
+
+func (p *convertProgressV1) commit() {
+	// Seek to the beginning of the file
+	_, err := p.rws.Seek(0, io.SeekStart)
+	if err != nil {
+		fmt.Printf("error seeking to start of file: %v\n", err)
+		return
+	}
+	// Truncate the file
+	if err := p.rws.Truncate(0); err != nil {
+		fmt.Printf("error truncating file: %v\n", err)
+		return
+	}
+	for _, value := range p.finished {
+		_, err := fmt.Fprintf(p.rws, "finished: %v\n", value)
+		if err != nil {
+			fmt.Printf("error writing to file: %v\n", err)
+			return
+		}
+	}
+
+	for key, value := range p.inProgress {
+		_, err := fmt.Fprintf(p.rws, "%v: %v\n", key, value)
+		if err != nil {
+			fmt.Printf("error writing to file: %v\n", err)
+			return
+		}
+	}
+}
+
+func (p *convertProgressV1) load() {
+	scanner := bufio.NewScanner(p.rws)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, ":")
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if key == "finished" {
+			p.finished = append(p.finished, value)
+		} else if k, err := strconv.ParseUint(value, 10, 64); err == nil {
+			p.inProgress[key] = k
 		}
 	}
 
@@ -378,6 +445,9 @@ func (p *convertProgress) load() {
 }
 
 func statedb2FactoryV2() (err error) {
+	if isUpgradeProgress {
+		return upgradeProgress()
+	}
 	// Check flags
 	if statedbFile == "" {
 		return fmt.Errorf("--statedb is empty")
@@ -497,7 +567,7 @@ func statedb2FactoryV2() (err error) {
 					return errors.Wrapf(err, "failed to put %s %x", e.Namespace(), e.Key())
 				}
 			}
-			progress.add(e.Namespace(), 1)
+			progress.set(e.Namespace(), e.Key())
 		}
 		if err = wss.Finalize(height); err != nil {
 			return errors.Wrap(err, "failed to finalize")
@@ -584,7 +654,7 @@ func statedb2FactoryV2() (err error) {
 			}
 			bar := progressbar.NewOptions(keyNum, progressbar.OptionThrottle(time.Millisecond*100), progressbar.OptionShowCount(), progressbar.OptionSetRenderBlankState(true))
 			realKeyNum := 0
-			err = b.ForEach(func(k, v []byte) error {
+			fn := func(k, v []byte) error {
 				if stopped.Load() {
 					return errors.New("program stopped")
 				}
@@ -592,13 +662,6 @@ func statedb2FactoryV2() (err error) {
 					panic("unexpected nested bucket")
 				}
 				realKeyNum++
-				if progress.processed(string(name), uint64(realKeyNum)) {
-					if noStats && realKeyNum >= bar.GetMax() {
-						bar.ChangeMax(realKeyNum * 3)
-					}
-					bar.Add(1)
-					return nil
-				}
 				bat.Put(string(name), k, v, "failed to put")
 				trieSize += uint64(len(v) + len(k))
 				if uint32(bat.Size()) >= uint32(size) || trieSize >= trieMaxSize {
@@ -614,7 +677,18 @@ func statedb2FactoryV2() (err error) {
 					bat = batch.NewBatch()
 				}
 				return nil
-			})
+			}
+			if startKey := progress.inProgress[string(name)]; startKey != nil {
+				fmt.Printf("ns %s start from key %x\n", name, startKey)
+				c := b.Cursor()
+				for k, v := c.Seek(startKey); k != nil; k, v = c.Next() {
+					if err := fn(k, v); err != nil {
+						return err
+					}
+				}
+			} else {
+				err = b.ForEach(fn)
+			}
 			if err != nil {
 				return err
 			}
@@ -697,4 +771,48 @@ func foreachReader(r io.Reader, fn func(*diff) error) error {
 	}
 
 	return scanner.Err()
+}
+
+func upgradeProgress() error {
+	// open progress file
+	file, err := os.OpenFile(progressFile, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	progressV1 := newConvertProgressV1(file)
+	progressV1.load()
+
+	// open statedb
+	statedb, err := bbolt.Open(statedbFile, 0666, &bbolt.Options{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer statedb.Close()
+
+	progress := newConvertProgress(file)
+	progress.finished = progressV1.finished
+	for ns, index := range progressV1.inProgress {
+		err = statedb.View(func(tx *bbolt.Tx) error {
+			bkt := tx.Bucket([]byte(ns))
+			if bkt == nil {
+				return errors.Errorf("bucket not found: %s", ns)
+			}
+			count := 0
+			_ = bkt.ForEach(func(k, v []byte) error {
+				count++
+				if count >= int(index)-10 {
+					progress.set(ns, k)
+					return errors.New("stop")
+				}
+				return nil
+			})
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	progress.commit()
+	return nil
 }
