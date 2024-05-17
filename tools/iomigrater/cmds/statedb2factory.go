@@ -300,6 +300,14 @@ func newConvertProgress(rws interface {
 	}
 }
 
+func (p *convertProgress) String() string {
+	inProgressStr := make(map[string]string)
+	for k, v := range p.inProgress {
+		inProgressStr[k] = hex.EncodeToString(v)
+	}
+	return fmt.Sprintf("{finished: %v, inProgress: %v}", p.finished, inProgressStr)
+}
+
 func (p *convertProgress) nsFinished(ns string) bool {
 	return slices.Contains(p.finished, ns)
 }
@@ -814,5 +822,6 @@ func upgradeProgress() error {
 		}
 	}
 	progress.commit()
+	fmt.Printf("progress upgrade\n from: %+v\n to: %v", *progressV1, progress)
 	return nil
 }
