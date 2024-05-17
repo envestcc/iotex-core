@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 
@@ -16,61 +20,68 @@ import (
 	"github.com/iotexproject/iotex-core/pkg/log"
 )
 
-type Shard struct {
-	id          uint64
-	startHeight uint64
-	endHeight   uint64
-}
-
 var (
-	shards = []Shard{
-		{0, 0, 1000000},
-		{1, 100000, 2000000},
-		{2, 2000000, 3000000},
-	}
+	configPath string
 )
 
-func main() {
-	targetURL, err := url.Parse("http://127.0.0.1:15014")
-	if err != nil {
-		log.L().Fatal("failed to parse target url", zap.Error(err))
-	}
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+func init() {
+	flag.StringVar(&configPath, "config-path", "", "Config path")
+	flag.Parse()
+}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		body, err := r.GetBody()
+func main() {
+	cfg, err := newConfig(configPath)
+	if err != nil {
+		log.L().Fatal("failed to load config", zap.Error(err))
+	}
+	log.S().Infof("Config in use: %+v\n", cfg)
+	shardProxys := make(map[uint64]*httputil.ReverseProxy)
+	for _, shard := range cfg.Shards {
+		targetURL, err := url.Parse(shard.Endpoint)
+		if err != nil {
+			log.L().Fatal("failed to parse target url", zap.Error(err))
+		}
+		proxy := httputil.NewSingleHostReverseProxy(targetURL)
+		shardProxys[shard.ID] = proxy
+	}
+
+	r := gin.Default()
+	r.POST("/", func(c *gin.Context) {
+		body, err := c.GetRawData()
 		if err != nil {
 			log.L().Error("failed to get request body", zap.Error(err))
-			// TODO: return error as web3 response
-			http.Error(w, "failed to get request body", http.StatusInternalServerError)
-			return
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		web3Reqs, err := parseWeb3Reqs(body)
+		if err != nil {
+			log.L().Error("failed to parse request", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(body))
 		if !web3Reqs.IsArray() {
 			height, err := parseWeb3Height(&web3Reqs)
 			if err != nil {
 				log.L().Error("failed to parse block number", zap.Error(err))
 				height = 0
 			}
-			shard := shardByHeight(height)
-			appendShardToRequest(r, shard)
-			proxy.ServeHTTP(w, r)
+			shard := shardByHeight(cfg.Shards, height)
+			appendShardToRequest(c.Request, shard)
+			log.L().Info("forwarding request to shard", zap.Uint64("shard", shard.ID), zap.Uint64("height", height), zap.String("endpoint", shard.Endpoint))
+			shardProxys[shard.ID].ServeHTTP(c.Writer, c.Request)
 		} else {
 			// TODO: batch request
-			shard := shardByHeight(0)
-			appendShardToRequest(r, shard)
-			proxy.ServeHTTP(w, r)
+			shard := shardByHeight(cfg.Shards, 0)
+			appendShardToRequest(c.Request, shard)
+			shardProxys[shard.ID].ServeHTTP(c.Writer, c.Request)
 		}
 	})
-
-	log.L().Fatal("proxy server stopped", zap.Error(http.ListenAndServe(":5014", nil)))
+	err = r.Run(fmt.Sprintf(":%d", cfg.Port))
+	if err != nil {
+		log.L().Fatal("failed to start server", zap.Error(err))
+	}
 }
 
-func parseWeb3Reqs(reader io.Reader) (gjson.Result, error) {
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return gjson.Result{}, err
-	}
+func parseWeb3Reqs(data []byte) (gjson.Result, error) {
 	if !gjson.Valid(string(data)) {
 		return gjson.Result{}, errors.New("request json format is not valid")
 	}
@@ -101,14 +112,14 @@ func parseWeb3Height(web3Req *gjson.Result) (uint64, error) {
 	return 0, nil
 }
 
-func shardByHeight(height uint64) *Shard {
+func shardByHeight(shards []Shard, height uint64) *Shard {
 	// if height is 0, return the last shard
 	if height == 0 {
 		return &shards[len(shards)-1]
 	}
 	// find the shard by historical height
 	for _, shard := range shards {
-		if height >= shard.startHeight && height < shard.endHeight {
+		if height >= shard.StartHeight && height < shard.EndHeight {
 			return &shard
 		}
 	}
@@ -117,7 +128,7 @@ func shardByHeight(height uint64) *Shard {
 }
 
 func appendShardToRequest(r *http.Request, shard *Shard) {
-	r.URL.Query().Add("shard", strconv.FormatUint(shard.id, 10))
+	r.URL.Query().Add("shard", strconv.FormatUint(shard.ID, 10))
 }
 
 func parseBlockNumber(str string) (uint64, error) {

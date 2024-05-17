@@ -25,6 +25,7 @@ BUILD_TARGET_MINICLUSTER=minicluster
 BUILD_TARGET_RECOVER=recover
 BUILD_TARGET_READTIP=readtip
 BUILD_TARGET_IOMIGRATER=iomigrater
+BUILD_TARGET_ARCHIVEGATEWAY=archivegateway
 BUILD_TARGET_OS=$(shell go env GOOS)
 BUILD_TARGET_ARCH=$(shell go env GOARCH)
 
@@ -272,3 +273,7 @@ newxctl:
 .PHONY: iomigrater
 iomigrater:
 	$(GOBUILD) -ldflags "$(PackageFlags)" -o ./bin/$(BUILD_TARGET_IOMIGRATER) -v ./tools/iomigrater
+
+.PHONY: archivegateway
+archivegateway:
+	$(GOBUILD) -ldflags "$(PackageFlags)" -o ./bin/$(BUILD_TARGET_ARCHIVEGATEWAY) -v ./archivegateway
