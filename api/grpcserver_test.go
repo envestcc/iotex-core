@@ -479,7 +479,7 @@ func TestGrpcServer_ReadContract(t *testing.T) {
 			CallerAddress: identityset.Address(0).String(),
 			GasLimit:      10100,
 		}
-		core.EXPECT().ReadContract(gomock.Any(), gomock.Any(), gomock.Any()).Return("", response, nil)
+		core.EXPECT().ReadContract(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", response, nil)
 
 		res, err := grpcSvr.ReadContract(context.Background(), request)
 		require.NoError(err)
@@ -495,7 +495,7 @@ func TestGrpcServer_ReadContract(t *testing.T) {
 			CallerAddress: "",
 			GasLimit:      10100,
 		}
-		core.EXPECT().ReadContract(gomock.Any(), gomock.Any(), gomock.Any()).Return("", response, nil)
+		core.EXPECT().ReadContract(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", response, nil)
 
 		res, err := grpcSvr.ReadContract(context.Background(), request)
 		require.NoError(err)
@@ -512,7 +512,7 @@ func TestGrpcServer_ReadContract(t *testing.T) {
 			CallerAddress: "",
 			GasLimit:      10100,
 		}
-		core.EXPECT().ReadContract(gomock.Any(), gomock.Any(), gomock.Any()).Return("", nil, expectedErr)
+		core.EXPECT().ReadContract(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", nil, expectedErr)
 
 		_, err := grpcSvr.ReadContract(context.Background(), request)
 		require.Contains(err.Error(), expectedErr.Error())

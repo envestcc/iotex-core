@@ -269,7 +269,7 @@ func parseLogRequest(in gjson.Result) (*filterObject, error) {
 	return &logReq, nil
 }
 
-func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.Int, *big.Int, []byte, error) {
+func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.Int, *big.Int, []byte, rpc.BlockNumber, error) {
 	var (
 		from     address.Address
 		to       string
@@ -277,6 +277,7 @@ func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.In
 		gasPrice *big.Int = big.NewInt(0)
 		value    *big.Int = big.NewInt(0)
 		data     []byte
+		height   = new(rpc.BlockNumber)
 		err      error
 	)
 	fromStr := in.Get("params.0.from").String()
@@ -284,14 +285,14 @@ func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.In
 		fromStr = "0x0000000000000000000000000000000000000000"
 	}
 	if from, err = ethAddrToIoAddr(fromStr); err != nil {
-		return nil, "", 0, nil, nil, nil, err
+		return nil, "", 0, nil, nil, nil, 0, err
 	}
 
 	toStr := in.Get("params.0.to").String()
 	if toStr != "" {
 		ioAddr, err := ethAddrToIoAddr(toStr)
 		if err != nil {
-			return nil, "", 0, nil, nil, nil, err
+			return nil, "", 0, nil, nil, nil, 0, err
 		}
 		to = ioAddr.String()
 	}
@@ -299,7 +300,7 @@ func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.In
 	gasStr := in.Get("params.0.gas").String()
 	if gasStr != "" {
 		if gasLimit, err = hexStringToNumber(gasStr); err != nil {
-			return nil, "", 0, nil, nil, nil, err
+			return nil, "", 0, nil, nil, nil, 0, err
 		}
 	}
 
@@ -307,7 +308,7 @@ func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.In
 	if gasPriceStr != "" {
 		var ok bool
 		if gasPrice, ok = new(big.Int).SetString(util.Remove0xPrefix(gasPriceStr), 16); !ok {
-			return nil, "", 0, nil, nil, nil, errors.Wrapf(errUnkownType, "gasPrice: %s", gasPriceStr)
+			return nil, "", 0, nil, nil, nil, 0, errors.Wrapf(errUnkownType, "gasPrice: %s", gasPriceStr)
 		}
 	}
 
@@ -315,7 +316,7 @@ func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.In
 	if valStr != "" {
 		var ok bool
 		if value, ok = new(big.Int).SetString(util.Remove0xPrefix(valStr), 16); !ok {
-			return nil, "", 0, nil, nil, nil, errors.Wrapf(errUnkownType, "value: %s", valStr)
+			return nil, "", 0, nil, nil, nil, 0, errors.Wrapf(errUnkownType, "value: %s", valStr)
 		}
 	}
 
@@ -325,7 +326,16 @@ func parseCallObject(in *gjson.Result) (address.Address, string, uint64, *big.In
 	} else {
 		data = common.FromHex(in.Get("params.0.data").String())
 	}
-	return from, to, gasLimit, gasPrice, value, data, nil
+
+	heightParam := in.Get("params.1")
+	if !heightParam.Exists() {
+		return from, to, gasLimit, gasPrice, value, data, rpc.LatestBlockNumber, nil
+	}
+	heightStr := heightParam.String()
+	if err = height.UnmarshalJSON([]byte(heightStr)); err != nil {
+		return nil, "", 0, nil, nil, nil, 0, err
+	}
+	return from, to, gasLimit, gasPrice, value, data, *height, nil
 }
 
 func parseBlockNumber(in *gjson.Result) (rpc.BlockNumber, error) {
