@@ -74,7 +74,7 @@ func NewServer(cfg config.Config) (*Server, error) {
 		return nil, errors.Wrap(err, "fail to create chain service")
 	}
 	nodeStats := nodestats.NewNodeStats(rpcStats, cs.BlockSync(), p2pAgent)
-	apiServer, err := cs.NewAPIServer(cfg.API, cfg.Chain.EnableTrielessStateDB && cfg.Chain.EnableVersionedStateDB)
+	apiServer, err := cs.NewAPIServer(cfg.API, cfg.Chain.HistoryWindowSize != 1)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create api server")
 	}
