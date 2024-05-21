@@ -49,7 +49,7 @@ func (core *coreServiceReaderWithHeight) Account(addr address.Address) (*iotexty
 	span.AddEvent("accountutil.AccountStateWithHeight")
 	ctx = genesis.WithGenesisContext(ctx, core.cs.bc.Genesis())
 	stateReader := newStateReaderWithHeight(core.cs.sf, core.height)
-	state, tipHeight, err := accountutil.AccountStateWithHeight(ctx, stateReader, addr)
+	state, err := accountutil.AccountState(ctx, stateReader, addr)
 	if err != nil {
 		return nil, nil, status.Error(codes.NotFound, err.Error())
 	}
@@ -94,7 +94,7 @@ func (core *coreServiceReaderWithHeight) Account(addr address.Address) (*iotexty
 	span.AddEvent("coreService.Account.End")
 	return accountMeta, &iotextypes.BlockIdentifier{
 		Hash:   hex.EncodeToString(hash[:]),
-		Height: tipHeight,
+		Height: core.height,
 	}, nil
 }
 
