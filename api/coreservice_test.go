@@ -625,7 +625,9 @@ func TestTraceTransaction(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	svr, bc, _, ap, cleanCallback := setupTestCoreService()
+	scfg := newConfig()
+	scfg.chain.HistoryWindowSize = 0
+	svr, bc, _, ap, cleanCallback := setupTestCoreServiceWithConfig(scfg)
 	defer cleanCallback()
 	ctx := context.Background()
 	tsf, err := action.SignedExecution(identityset.Address(29).String(),

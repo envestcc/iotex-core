@@ -1860,9 +1860,51 @@ func (core *coreService) TraceTransaction(ctx context.Context, actHash string, c
 		return nil, nil, nil, errors.New("the type of action is not supported")
 	}
 	addr, _ := address.FromString(address.ZeroAddress)
+	blk, err := core.dao.GetBlockByHeight(actInfo.BlkHeight)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	preActs := make([]*action.SealedEnvelope, 0)
+	hash, err := act.Hash()
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "failed to hash action")
+	}
+	for _, selp := range blk.Actions {
+		shash, err := selp.Hash()
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to hash action")
+		}
+		if bytes.Equal(shash[:], hash[:]) {
+			break
+		}
+		preActs = append(preActs, selp)
+	}
+	// generate the working set just before the target action
+	ctx, err = core.bc.ContextAtHeight(ctx, actInfo.BlkHeight-1)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	g := core.bc.Genesis()
+	ctx = protocol.WithBlockCtx(ctx, protocol.BlockCtx{
+		BlockHeight:    blk.Height(),
+		BlockTimeStamp: blk.Timestamp(),
+		GasLimit:       g.BlockGasLimitByHeight(blk.Height()),
+		Producer:       blk.PublicKey().Address(),
+	})
+	ctx = protocol.WithRegistry(ctx, core.registry)
+	ctx = protocol.WithFeatureCtx(ctx)
+	ws, err := core.sf.CleanWorkingSetAtHeight(ctx, actInfo.BlkHeight, preActs...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	retval, receipt, tracer, err := core.traceTx(ctx, new(tracers.Context), config, func(ctx context.Context) ([]byte, *action.Receipt, error) {
-
-		return core.simulateExecution(ctx, addr, sc, core.dao.GetBlockHash, core.getBlockTime)
+		ctx = evm.WithHelperCtx(ctx, evm.HelperContext{
+			GetBlockHash:   core.dao.GetBlockHash,
+			GetBlockTime:   core.getBlockTime,
+			DepositGasFunc: rewarding.DepositGasWithSGD,
+			Sgd:            core.sgdIndexer,
+		})
+		return evm.SimulateExecution(ctx, ws, addr, sc)
 	})
 	return retval, receipt, tracer, err
 }
