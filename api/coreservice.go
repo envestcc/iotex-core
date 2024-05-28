@@ -1990,7 +1990,7 @@ func (core *coreService) TraceBlockByNumber(ctx context.Context, blkNum rpc.Bloc
 }
 
 func (core *coreService) TraceBlockByHash(ctx context.Context, blkHash string, config *tracers.TraceConfig) ([][]byte, []*action.Receipt, any, error) {
-	h, err := hash.HexStringToHash256(blkHash)
+	h, err := hash.HexStringToHash256(util.Remove0xPrefix(blkHash))
 	if err != nil {
 		return nil, nil, nil, err
 	}
