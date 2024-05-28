@@ -102,12 +102,17 @@ func parseWeb3Height(web3Req *gjson.Result) (uint64, error) {
 		method = web3Req.Get("method").Value()
 	)
 	switch method {
-	case "eth_getBalance", "eth_getCode", "eth_getTransactionCount", "eth_call", "eth_estimateGas":
+	case "eth_getBalance", "eth_getCode", "eth_getTransactionCount", "eth_call", "eth_estimateGas", "debug_traceCall":
 		blkNum := web3Req.Get("params.1")
 		return parseBlockNumber(blkNum.String())
 	case "eth_getStorageAt":
 		blkNum := web3Req.Get("params.2")
 		return parseBlockNumber(blkNum.String())
+	case "debug_traceBlockByNumber":
+		blkNum := web3Req.Get("params.0")
+		return parseBlockNumber(blkNum.String())
+	case "debug_traceTransaction", "debug_traceBlockByHash":
+		// TODO: get height from transaction/block hash
 	}
 	return 0, nil
 }
