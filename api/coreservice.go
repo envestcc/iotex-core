@@ -1846,7 +1846,6 @@ func (core *coreService) SyncingProgress() (uint64, uint64, uint64) {
 	return startingHeight, currentHeight, targetHeight
 }
 
-// TODO: support this by height
 // TraceTransaction returns the trace result of transaction
 func (core *coreService) TraceTransaction(ctx context.Context, actHash string, config *tracers.TraceConfig) ([]byte, *action.Receipt, any, error) {
 	actInfo, err := core.Action(util.Remove0xPrefix(actHash), false)
@@ -1861,7 +1860,6 @@ func (core *coreService) TraceTransaction(ctx context.Context, actHash string, c
 	if !ok {
 		return nil, nil, nil, errors.New("the type of action is not supported")
 	}
-	addr, _ := address.FromString(address.ZeroAddress)
 	blk, err := core.dao.GetBlockByHeight(actInfo.BlkHeight)
 	if err != nil {
 		return nil, nil, nil, err
@@ -1871,15 +1869,15 @@ func (core *coreService) TraceTransaction(ctx context.Context, actHash string, c
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to hash action")
 	}
-	for _, selp := range blk.Actions {
-		shash, err := selp.Hash()
+	for i := range blk.Actions {
+		shash, err := blk.Actions[i].Hash()
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to hash action")
 		}
 		if bytes.Equal(shash[:], hash[:]) {
 			break
 		}
-		preActs = append(preActs, selp)
+		preActs = append(preActs, blk.Actions[i])
 	}
 	// generate the working set just before the target action
 	ctx, err = core.bc.ContextAtHeight(ctx, actInfo.BlkHeight)
@@ -1899,6 +1897,20 @@ func (core *coreService) TraceTransaction(ctx context.Context, actHash string, c
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	intrinsicGas, err := act.IntrinsicGas()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	ctx = protocol.WithActionCtx(
+		ctx,
+		protocol.ActionCtx{
+			Caller:       act.SenderAddress(),
+			ActionHash:   hash,
+			GasPrice:     act.GasPrice(),
+			IntrinsicGas: intrinsicGas,
+			Nonce:        act.Nonce(),
+		},
+	)
 	retval, receipt, tracer, err := core.traceTx(ctx, new(tracers.Context), config, func(ctx context.Context) ([]byte, *action.Receipt, error) {
 		ctx = evm.WithHelperCtx(ctx, evm.HelperContext{
 			GetBlockHash:   core.dao.GetBlockHash,
@@ -1906,7 +1918,7 @@ func (core *coreService) TraceTransaction(ctx context.Context, actHash string, c
 			DepositGasFunc: rewarding.DepositGasWithSGD,
 			Sgd:            core.sgdIndexer,
 		})
-		return evm.SimulateExecution(ctx, ws, addr, sc)
+		return evm.ExecuteContract(ctx, ws, action.NewEvmTx(sc))
 	})
 	return retval, receipt, tracer, err
 }
