@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
@@ -76,10 +77,51 @@ func (handler *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		log.L().Info("forwarding request to shard", zap.Uint64("shard", shard.ID), zap.String("request height", blkNum.String()), zap.String("endpoint", shard.Endpoint))
 		handler.proxys[shard.ID].ServeHTTP(w, req)
 	} else {
-		// TODO: batch request
-		shard := handler.shardByHeight(rpc.LatestBlockNumber)
-		appendShardToRequest(req, shard)
-		handler.proxys[shard.ID].ServeHTTP(w, req)
+		type shardReq struct {
+			index int
+			req   *gjson.Result
+		}
+		reqs := web3Reqs.Array()
+		groupedReqs := make(map[uint64][]*shardReq)
+		for i := range reqs {
+			blkNum, err := handler.parseWeb3Height(&reqs[i])
+			if err != nil {
+				log.L().Error("failed to parse block number", zap.Error(err))
+				blkNum = rpc.LatestBlockNumber
+			}
+			shard := handler.shardByHeight(blkNum)
+
+			groupedReqs[shard.ID] = append(groupedReqs[shard.ID], &shardReq{
+				index: i,
+				req:   &reqs[i],
+			})
+		}
+		bodies := make([][]byte, len(reqs))
+		for shardID, reqs := range groupedReqs {
+			shard := &handler.shards[shardID]
+			groupBodies := make([][]byte, len(reqs))
+			for i := range reqs {
+				groupBodies[i] = []byte(reqs[i].req.Raw)
+			}
+			body := append([]byte("["), bytes.Join(groupBodies, []byte(","))...)
+			body = append(body, []byte("]")...)
+			req.Body = io.NopCloser(bytes.NewBuffer(body))
+			req.ContentLength = int64(len(body))
+			appendShardToRequest(req, shard)
+			writer := httptest.NewRecorder()
+			handler.proxys[shard.ID].ServeHTTP(writer, req)
+			subResps := gjson.ParseBytes(writer.Body.Bytes()).Array()
+			for i, subResp := range subResps {
+				bodies[reqs[i].index] = []byte(subResp.Raw)
+			}
+		}
+		// write all bodies to response
+		allBody := append([]byte("["), bytes.Join(bodies, []byte(","))...)
+		allBody = append(allBody, []byte("]")...)
+		_, err = w.Write(allBody)
+		if err != nil {
+			log.L().Error("failed to write response", zap.Error(err))
+		}
 	}
 }
 
@@ -144,5 +186,5 @@ func (handler *proxyHandler) parseWeb3Height(web3Req *gjson.Result) (rpc.BlockNu
 }
 
 func appendShardToRequest(r *http.Request, shard *ProxyShard) {
-	r.URL.Query().Add("shard", strconv.FormatUint(shard.ID, 10))
+	r.URL.Query().Set("shard", strconv.FormatUint(shard.ID, 10))
 }
