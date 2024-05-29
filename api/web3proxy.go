@@ -14,8 +14,10 @@ import (
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 
+	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/go-pkgs/util"
 
+	"github.com/iotexproject/iotex-core/blockchain/blockdao"
 	"github.com/iotexproject/iotex-core/pkg/log"
 )
 
@@ -23,15 +25,15 @@ type (
 	proxyHandler struct {
 		proxys map[uint64]*httputil.ReverseProxy
 		shards []ProxyShard
-		cs     CoreService
+		dao    blockdao.BlockDAO
 	}
 )
 
-func newProxyHandler(shards []ProxyShard, cs CoreService) (*proxyHandler, error) {
+func newProxyHandler(shards []ProxyShard, dao blockdao.BlockDAO) (*proxyHandler, error) {
 	h := &proxyHandler{
 		proxys: make(map[uint64]*httputil.ReverseProxy),
 		shards: shards,
-		cs:     cs,
+		dao:    dao,
 	}
 	if len(shards) == 0 {
 		return nil, errors.New("no shards provided")
@@ -126,11 +128,15 @@ func (handler *proxyHandler) parseWeb3Height(web3Req *gjson.Result) (rpc.BlockNu
 		blkNum, err = parseBlockNumber(&blkParam)
 	case "debug_traceTransaction", "debug_traceBlockByHash":
 		blkHash := web3Req.Get("params.0")
-		blk, err := handler.cs.BlockByHash(util.Remove0xPrefix(blkHash.String()))
+		hash, err := hash.HexStringToHash256(util.Remove0xPrefix(blkHash.String()))
 		if err != nil {
 			return 0, err
 		}
-		blkNum = rpc.BlockNumber(blk.Block.Height())
+		height, err := handler.dao.GetBlockHeight(hash)
+		if err != nil {
+			return 0, err
+		}
+		blkNum = rpc.BlockNumber(height)
 	default:
 		blkNum = rpc.LatestBlockNumber
 	}
