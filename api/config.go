@@ -13,17 +13,18 @@ import (
 // Config is the api service config
 type (
 	Config struct {
-		UseRDS          bool              `yaml:"useRDS"`
-		GRPCPort        int               `yaml:"port"`
-		HTTPPort        int               `yaml:"web3port"`
-		WebSocketPort   int               `yaml:"webSocketPort"`
-		ProxyPort       int               `yaml:"proxyPort"`
-		ProxyShards     []ProxyShard      `yaml:"proxyShards"`
-		RedisCacheURL   string            `yaml:"redisCacheURL"`
-		TpsWindow       int               `yaml:"tpsWindow"`
-		GasStation      gasstation.Config `yaml:"gasStation"`
-		RangeQueryLimit uint64            `yaml:"rangeQueryLimit"`
-		Tracer          tracer.Config     `yaml:"tracer"`
+		UseRDS             bool              `yaml:"useRDS"`
+		GRPCPort           int               `yaml:"port"`
+		HTTPPort           int               `yaml:"web3port"`
+		WebSocketPort      int               `yaml:"webSocketPort"`
+		ProxyPort          int               `yaml:"proxyPort"`
+		ProxyShards        []ProxyShard      `yaml:"proxyShards"`
+		UnifyProxyEndpoint string            `yaml:"unifyProxyEndpoint"`
+		RedisCacheURL      string            `yaml:"redisCacheURL"`
+		TpsWindow          int               `yaml:"tpsWindow"`
+		GasStation         gasstation.Config `yaml:"gasStation"`
+		RangeQueryLimit    uint64            `yaml:"rangeQueryLimit"`
+		Tracer             tracer.Config     `yaml:"tracer"`
 		// BatchRequestLimit is the maximum number of requests in a batch.
 		BatchRequestLimit int `yaml:"batchRequestLimit"`
 		// WebsocketRateLimit is the maximum number of messages per second per client.

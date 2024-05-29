@@ -30,7 +30,7 @@ type (
 	}
 )
 
-func newProxyHandler(shards []ProxyShard, dao blockdao.BlockDAO) (*proxyHandler, error) {
+func newProxyHandler(shards []ProxyShard, dao blockdao.BlockDAO, endpoint string) (*proxyHandler, error) {
 	h := &proxyHandler{
 		proxys: make(map[uint64]*httputil.ReverseProxy),
 		shards: shards,
@@ -40,6 +40,10 @@ func newProxyHandler(shards []ProxyShard, dao blockdao.BlockDAO) (*proxyHandler,
 		return nil, errors.New("no shards provided")
 	}
 	for _, shard := range shards {
+		// use the endpoint from the config if it's not empty
+		if endpoint != "" {
+			shard.Endpoint = endpoint
+		}
 		targetURL, err := url.Parse(shard.Endpoint)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse endpoint %s", shard.Endpoint)
@@ -52,7 +56,7 @@ func newProxyHandler(shards []ProxyShard, dao blockdao.BlockDAO) (*proxyHandler,
 
 func (handler *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {
-		handler.proxys[0].ServeHTTP(w, req)
+		handler.proxyOfShard(handler.shardByHeight(rpc.LatestBlockNumber).ID).ServeHTTP(w, req)
 		return
 	}
 	bodyBytes, err := io.ReadAll(req.Body)
@@ -75,11 +79,13 @@ func (handler *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		shard := handler.shardByHeight(blkNum)
 		appendShardToRequest(req, shard)
 		log.L().Info("forwarding request to shard", zap.Uint64("shard", shard.ID), zap.String("request height", blkNum.String()), zap.String("endpoint", shard.Endpoint))
-		handler.proxys[shard.ID].ServeHTTP(w, req)
+		proxy := handler.proxyOfShard(shard.ID)
+		proxy.ServeHTTP(w, req)
 	} else {
 		type shardReq struct {
-			index int
-			req   *gjson.Result
+			index  int
+			blkNum rpc.BlockNumber
+			req    *gjson.Result
 		}
 		reqs := web3Reqs.Array()
 		groupedReqs := make(map[uint64][]*shardReq)
@@ -90,10 +96,10 @@ func (handler *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 				blkNum = rpc.LatestBlockNumber
 			}
 			shard := handler.shardByHeight(blkNum)
-
 			groupedReqs[shard.ID] = append(groupedReqs[shard.ID], &shardReq{
-				index: i,
-				req:   &reqs[i],
+				index:  i,
+				req:    &reqs[i],
+				blkNum: blkNum,
 			})
 		}
 		bodies := make([][]byte, len(reqs))
@@ -109,7 +115,8 @@ func (handler *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 			req.ContentLength = int64(len(body))
 			appendShardToRequest(req, shard)
 			writer := httptest.NewRecorder()
-			handler.proxys[shard.ID].ServeHTTP(writer, req)
+			log.L().Info("forwarding batch request to shard", zap.Uint64("shard", shard.ID), zap.Int("batch request size", len(reqs)), zap.String("endpoint", shard.Endpoint))
+			handler.proxyOfShard(shard.ID).ServeHTTP(writer, req)
 			subResps := gjson.ParseBytes(writer.Body.Bytes()).Array()
 			for i, subResp := range subResps {
 				bodies[reqs[i].index] = []byte(subResp.Raw)
@@ -183,6 +190,10 @@ func (handler *proxyHandler) parseWeb3Height(web3Req *gjson.Result) (rpc.BlockNu
 		blkNum = rpc.LatestBlockNumber
 	}
 	return blkNum, err
+}
+
+func (handler *proxyHandler) proxyOfShard(shardID uint64) *httputil.ReverseProxy {
+	return handler.proxys[shardID]
 }
 
 func appendShardToRequest(r *http.Request, shard *ProxyShard) {
