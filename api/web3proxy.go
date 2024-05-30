@@ -18,7 +18,6 @@ import (
 	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/go-pkgs/util"
 
-	"github.com/iotexproject/iotex-core/blockchain/blockdao"
 	"github.com/iotexproject/iotex-core/pkg/log"
 )
 
@@ -26,15 +25,15 @@ type (
 	proxyHandler struct {
 		proxys map[uint64]*httputil.ReverseProxy
 		shards []ProxyShard
-		dao    blockdao.BlockDAO
+		cs     CoreService
 	}
 )
 
-func newProxyHandler(shards []ProxyShard, dao blockdao.BlockDAO, endpoint string) (*proxyHandler, error) {
+func newProxyHandler(shards []ProxyShard, cs CoreService, endpoint string) (*proxyHandler, error) {
 	h := &proxyHandler{
 		proxys: make(map[uint64]*httputil.ReverseProxy),
 		shards: shards,
-		dao:    dao,
+		cs:     cs,
 	}
 	if len(shards) == 0 {
 		return nil, errors.New("no shards provided")
@@ -178,17 +177,22 @@ func (handler *proxyHandler) parseWeb3Height(web3Req *gjson.Result) (rpc.BlockNu
 		blkNum, err = parseBlockNumber(&blkParam)
 	case "debug_traceBlockByHash":
 		blkHash := web3Req.Get("params.0")
-		hash, err := hash.HexStringToHash256(util.Remove0xPrefix(blkHash.String()))
+		blk, err := handler.cs.BlockByHash(util.Remove0xPrefix(blkHash.String()))
 		if err != nil {
 			return 0, err
 		}
-		height, err := handler.dao.GetBlockHeight(hash)
-		if err != nil {
-			return 0, err
-		}
-		blkNum = rpc.BlockNumber(height)
+		blkNum = rpc.BlockNumber(blk.Block.Height())
 	case "debug_traceTransaction":
-
+		txHash := web3Req.Get("params.0")
+		actHash, err := hash.HexStringToHash256(util.Remove0xPrefix(txHash.String()))
+		if err != nil {
+			return 0, err
+		}
+		_, blk, _, err := handler.cs.ActionByActionHash(actHash)
+		if err != nil {
+			return 0, err
+		}
+		blkNum = rpc.BlockNumber(blk.Height())
 	default:
 		blkNum = rpc.LatestBlockNumber
 	}

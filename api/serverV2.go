@@ -69,7 +69,7 @@ func NewServerV2(
 
 	limiter := rate.NewLimiter(rate.Limit(cfg.WebsocketRateLimit), 1)
 	wrappedWebsocketHandler := otelhttp.NewHandler(NewWebsocketHandler(web3Handler, limiter), "web3.websocket")
-	proxyHandler, err := newProxyHandler(cfg.ProxyShards, dao, cfg.UnifyProxyEndpoint)
+	proxyHandler, err := newProxyHandler(cfg.ProxyShards, coreAPI, cfg.UnifyProxyEndpoint)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create proxy handler")
 	}
