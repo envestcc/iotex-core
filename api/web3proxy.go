@@ -79,7 +79,7 @@ func (handler *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		}
 		shard := handler.shardByHeight(blkNum)
 		appendShardToRequest(req, shard)
-		log.L().Info("forwarding request to shard", zap.Uint64("shard", shard.ID), zap.String("request height", blkNum.String()), zap.String("endpoint", shard.Endpoint))
+		log.L().Info("forwarding request to shard", zap.Uint64("shard", shard.ID), zap.String("request height", blkNum.String()), zap.String("endpoint", shard.Endpoint), zap.String("url", req.URL.RequestURI()))
 		proxy := handler.proxyOfShard(shard.ID)
 		proxy.ServeHTTP(w, req)
 	} else {
@@ -116,7 +116,7 @@ func (handler *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 			req.ContentLength = int64(len(body))
 			appendShardToRequest(req, shard)
 			writer := httptest.NewRecorder()
-			log.L().Info("forwarding batch request to shard", zap.Uint64("shard", shard.ID), zap.Int("batch request size", len(reqs)), zap.String("endpoint", shard.Endpoint))
+			log.L().Info("forwarding batch request to shard", zap.Uint64("shard", shard.ID), zap.Int("batch request size", len(reqs)), zap.String("endpoint", shard.Endpoint), zap.String("url", req.URL.RequestURI()))
 			handler.proxyOfShard(shard.ID).ServeHTTP(writer, req)
 			subResps := gjson.ParseBytes(writer.Body.Bytes()).Array()
 			for i, subResp := range subResps {
@@ -187,7 +187,7 @@ func (handler *proxyHandler) parseWeb3Height(web3Req *gjson.Result) (rpc.BlockNu
 			return 0, err
 		}
 		blkNum = rpc.BlockNumber(height)
-	// case "debug_traceTransaction":
+	case "debug_traceTransaction":
 
 	default:
 		blkNum = rpc.LatestBlockNumber
@@ -200,5 +200,7 @@ func (handler *proxyHandler) proxyOfShard(shardID uint64) *httputil.ReverseProxy
 }
 
 func appendShardToRequest(r *http.Request, shard *ProxyShard) {
-	r.URL.Query().Set("shard", strconv.FormatUint(shard.ID, 10))
+	query := r.URL.Query()
+	query.Set("shard", strconv.FormatUint(shard.ID, 10))
+	r.URL.RawQuery = query.Encode()
 }
