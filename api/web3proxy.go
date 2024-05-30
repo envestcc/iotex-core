@@ -39,7 +39,8 @@ func newProxyHandler(shards []ProxyShard, dao blockdao.BlockDAO, endpoint string
 	if len(shards) == 0 {
 		return nil, errors.New("no shards provided")
 	}
-	for _, shard := range shards {
+	for i := range shards {
+		shard := &shards[i]
 		// use the endpoint from the config if it's not empty
 		if endpoint != "" {
 			shard.Endpoint = endpoint
@@ -175,7 +176,7 @@ func (handler *proxyHandler) parseWeb3Height(web3Req *gjson.Result) (rpc.BlockNu
 	case "debug_traceBlockByNumber":
 		blkParam := web3Req.Get("params.0")
 		blkNum, err = parseBlockNumber(&blkParam)
-	case "debug_traceTransaction", "debug_traceBlockByHash":
+	case "debug_traceBlockByHash":
 		blkHash := web3Req.Get("params.0")
 		hash, err := hash.HexStringToHash256(util.Remove0xPrefix(blkHash.String()))
 		if err != nil {
@@ -186,6 +187,8 @@ func (handler *proxyHandler) parseWeb3Height(web3Req *gjson.Result) (rpc.BlockNu
 			return 0, err
 		}
 		blkNum = rpc.BlockNumber(height)
+	// case "debug_traceTransaction":
+
 	default:
 		blkNum = rpc.LatestBlockNumber
 	}
