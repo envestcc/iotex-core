@@ -17,6 +17,7 @@ import (
 	"github.com/iotexproject/iotex-core/db"
 	"github.com/iotexproject/iotex-core/db/trie"
 	"github.com/iotexproject/iotex-core/db/trie/mptrie"
+	"github.com/iotexproject/iotex-core/pkg/util/byteutil"
 	"github.com/iotexproject/iotex-core/state/factory"
 	"github.com/iotexproject/iotex-core/tools/iomigrater/common"
 )
@@ -63,15 +64,16 @@ func factoryClient() error {
 	}
 	defer statedb.Close()
 	// read statedb height
-	// height := uint64(0)
-	// statedb.View(func(tx *bbolt.Tx) error {
-	// 	bucket := tx.Bucket([]byte(factory.AccountKVNamespace))
-	// 	if bucket == nil {
-	// 		return errors.New("bucket not found")
-	// 	}
-	// 	height = byteutil.BytesToUint64(bucket.Get([]byte(factory.CurrentHeightKey)))
-	// 	return nil
-	// })
+	height := uint64(0)
+	statedb.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte(factory.AccountKVNamespace))
+		if bucket == nil {
+			return errors.New("bucket not found")
+		}
+		height = byteutil.BytesToUint64(bucket.Get([]byte(factory.CurrentHeightKey)))
+		return nil
+	})
+	fmt.Printf("statedb height %d\n", height)
 	// open factorydb
 	var factorydb db.KVStore
 	dbCfg := db.DefaultConfig
@@ -103,6 +105,8 @@ func factoryClient() error {
 	}
 	notfounds := [][][]byte{}
 	unmatchs := [][][]byte{}
+	heightTlt, err := factorydb.Get(string(factory.AccountKVNamespace), []byte(factory.CurrentHeightKey))
+	fmt.Printf("\ntlt height %d\n", byteutil.BytesToUint64(heightTlt))
 	if err := statedb.View(func(tx *bbolt.Tx) error {
 		if err := tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
 			if len(namespaces) > 0 && slices.Index(namespaces, string(name)) < 0 {
@@ -142,6 +146,7 @@ func factoryClient() error {
 				keyLegacy := hash.Hash160b(k)
 				if string(name) == factory.AccountKVNamespace && string(k) == factory.CurrentHeightKey {
 					value, err = factorydb.Get(string(name), k)
+					fmt.Printf("\ntlt height %d\n", value)
 				} else {
 					value, err = tlt.Get(nsHash[:], keyLegacy[:])
 					value2, err2 := factorydb.Get(string(name), k)
