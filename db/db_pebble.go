@@ -45,7 +45,7 @@ type PebbleDB struct {
 	config Config
 }
 
-// NewBoltDB instantiates an BoltDB with implements KVStore
+// NewPebbleDB creates a new PebbleDB instance
 func NewPebbleDB(cfg Config) *PebbleDB {
 	return &PebbleDB{
 		db:     nil,
@@ -196,7 +196,10 @@ func (b *PebbleDB) Filter(ns string, cond Condition, minKey []byte, maxKey []byt
 		return nil, nil, ErrDBNotStarted
 	}
 
-	iter := b.db.NewIter(&pebble.IterOptions{})
+	iter, err := b.db.NewIter(&pebble.IterOptions{})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create iterator")
+	}
 	defer func() {
 		if e := iter.Close(); e != nil {
 			log.L().Error("Failed to close iterator", zap.Error(e))
@@ -228,11 +231,15 @@ func (b *PebbleDB) Filter(ns string, cond Condition, minKey []byte, maxKey []byt
 	return
 }
 
+// ForEach iterates over all <k, v> pairs in a bucket
 func (b *PebbleDB) ForEach(fn func(ns string, k, v []byte) error) error {
 	if !b.IsReady() {
 		return ErrDBNotStarted
 	}
-	iter := b.db.NewIter(&pebble.IterOptions{})
+	iter, err := b.db.NewIter(&pebble.IterOptions{})
+	if err != nil {
+		return errors.Wrap(err, "failed to create iterator")
+	}
 	defer func() {
 		if e := iter.Close(); e != nil {
 			log.L().Error("Failed to close iterator", zap.Error(e))
