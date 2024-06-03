@@ -50,6 +50,7 @@ func init() {
 	RootCmd.AddCommand(cmd.CompactPebbleDB)
 	RootCmd.AddCommand(cmd.StateDB2Factory)
 	RootCmd.AddCommand(cmd.DBCompare)
+	RootCmd.AddCommand(cmd.FactoryClient)
 
 	RootCmd.HelpFunc()
 }
