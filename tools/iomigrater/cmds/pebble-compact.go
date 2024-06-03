@@ -68,7 +68,10 @@ func compactPebbleDBFile() (err error) {
 	}
 	defer db.Close()
 
-	iter := db.NewIter(nil)
+	iter, err := db.NewIter(nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to create iterator")
+	}
 	var first, last []byte
 	if iter.First() {
 		first = append(first, iter.Key()...)
