@@ -30,6 +30,8 @@ type Config struct {
 	ReadOnly bool `yaml:"readOnly"`
 	// EnablePebbleDB is set to use pebble db
 	EnablePebbleDB bool `yaml:"enablePebbleDB"`
+	// HardStopHeight is the height to stop the node
+	HardStopHeight uint64 `yaml:"hardStopHeight"`
 }
 
 // SplitDBSize returns the configured SplitDBSizeMB
@@ -48,4 +50,5 @@ var DefaultConfig = Config{
 	SplitDBSizeMB:         0,
 	SplitDBHeight:         900000,
 	HistoryStateRetention: 2000,
+	HardStopHeight:        0,
 }

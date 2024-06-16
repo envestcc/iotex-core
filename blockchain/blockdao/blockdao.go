@@ -64,6 +64,7 @@ type (
 		blockCache          cache.LRUCache
 		tipHeight           uint64
 		disableIndexerCheck bool
+		stopHeight          uint64
 	}
 
 	Option func(*blockDAO) error
@@ -84,6 +85,13 @@ func CacheSizeOption(cacheSize int) Option {
 			deo.receiptCache = cache.NewThreadSafeLruCache(cacheSize)
 			deo.blockCache = cache.NewThreadSafeLruCache(cacheSize)
 		}
+		return nil
+	}
+}
+
+func HardStopOption(height uint64) Option {
+	return func(dao *blockDAO) error {
+		dao.stopHeight = height
 		return nil
 	}
 }
@@ -137,13 +145,19 @@ func (dao *blockDAO) Start(ctx context.Context) error {
 	if dao.disableIndexerCheck {
 		return nil
 	}
-	return dao.checkIndexers(ctx)
+	if err = dao.checkIndexers(ctx); err != nil {
+		return err
+	}
+	if dao.stopHeight > 0 && tipHeight > dao.stopHeight {
+		log.L().Panic("tip height is greater than stop height", zap.Uint64("tipHeight", tipHeight), zap.Uint64("stopHeight", dao.stopHeight))
+	}
+	return nil
 }
 
 func (dao *blockDAO) checkIndexers(ctx context.Context) error {
 	checker := NewBlockIndexerChecker(dao)
 	for i, indexer := range dao.indexers {
-		if err := checker.CheckIndexer(ctx, indexer, 0, func(height uint64) {
+		if err := checker.CheckIndexer(ctx, indexer, dao.stopHeight, func(height uint64) {
 			if height%5000 == 0 {
 				log.L().Info(
 					"indexer is catching up.",
@@ -280,6 +294,9 @@ func (dao *blockDAO) TransactionLogs(height uint64) (*iotextypes.TransactionLogs
 }
 
 func (dao *blockDAO) PutBlock(ctx context.Context, blk *block.Block) error {
+	if dao.stopHeight > 0 && blk.Height() > dao.stopHeight {
+		log.L().Panic("block height is greater than stop height", zap.Uint64("blockHeight", blk.Height()), zap.Uint64("stopHeight", dao.stopHeight))
+	}
 	timer := dao.timerFactory.NewTimer("put_block")
 	if err := dao.blockStore.PutBlock(ctx, blk); err != nil {
 		timer.End()

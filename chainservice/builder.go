@@ -332,7 +332,7 @@ func (builder *Builder) buildBlockDAO() error {
 	if err != nil {
 		return err
 	}
-	opts := []blockdao.Option{blockdao.CacheSizeOption(builder.cfg.DB.MaxCacheSize)}
+	opts := []blockdao.Option{blockdao.CacheSizeOption(builder.cfg.DB.MaxCacheSize), blockdao.HardStopOption(builder.cfg.DB.HardStopHeight)}
 	if builder.readOnly() {
 		opts = append(opts, blockdao.DisableCheckIndexerOption())
 	}
