@@ -107,8 +107,8 @@ type (
 		Self() ([]multiaddr.Multiaddr, error)
 		// BlockPeer blocks the peer in p2p layer
 		BlockPeer(string)
-		// NetworkProxy returns a network proxy to agent
-		NetworkProxy(string) NetworkProxy
+		// Subnet returns a network proxy to agent
+		Subnet(string) SubnetProxy
 		// ConnectedPeers returns the connected peers' info
 		ConnectedPeers() ([]peer.AddrInfo, error)
 	}
@@ -133,10 +133,10 @@ type (
 	}
 )
 
-// JoinNetwork choose networks to join.
+// JoinSubnet choose networks to join.
 // You will only receive messages from the networks you joined.
 // "" is a special network name, which means the whole network before introducing message network.
-func JoinNetwork(networks ...string) Option {
+func JoinSubnet(networks ...string) Option {
 	return func(a *agent) {
 		for _, network := range networks {
 			a.networks[network] = struct{}{}
@@ -201,7 +201,7 @@ func (*dummyAgent) BuildReport() string {
 	return ""
 }
 
-func (d *dummyAgent) NetworkProxy(n string) NetworkProxy {
+func (d *dummyAgent) Subnet(n string) SubnetProxy {
 	return d
 }
 
@@ -540,8 +540,8 @@ func (p *agent) BuildReport() string {
 	return ""
 }
 
-func (p *agent) NetworkProxy(network string) NetworkProxy {
-	return &networkProxy{
+func (p *agent) Subnet(network string) SubnetProxy {
+	return &subnetProxy{
 		agent:   p,
 		network: network,
 	}

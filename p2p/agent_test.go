@@ -31,7 +31,7 @@ const (
 
 func TestDummyAgent(t *testing.T) {
 	require := require.New(t)
-	a := NewDummyAgent().NetworkProxy(_blockNetwork)
+	a := NewDummyAgent().Subnet(_blockNetwork)
 	require.NoError(a.Start(nil))
 	require.NoError(a.Stop(nil))
 	require.NoError(a.BroadcastOutbound(nil, nil))
@@ -89,13 +89,13 @@ func TestBroadcast(t *testing.T) {
 			BootstrapNodes:    []string{bootnodeAddr[0].String()},
 			ReconnectInterval: 150 * time.Second,
 			MaxMessageSize:    p2p.DefaultConfig.MaxMessageSize,
-		}, 1, hash.ZeroHash256, b, u, JoinNetwork(_blockNetwork))
+		}, 1, hash.ZeroHash256, b, u, JoinSubnet(_blockNetwork))
 		agent.Start(ctx)
 		agents = append(agents, agent)
 	}
 
 	for i := 0; i < n; i++ {
-		r.NoError(agents[i].NetworkProxy(_blockNetwork).BroadcastOutbound(ctx, &testingpb.TestPayload{
+		r.NoError(agents[i].Subnet(_blockNetwork).BroadcastOutbound(ctx, &testingpb.TestPayload{
 			MsgBody: []byte{uint8(i)},
 		}))
 		r.NoError(testutil.WaitUntil(100*time.Millisecond, 20*time.Second, func() (bool, error) {
@@ -152,10 +152,10 @@ func TestNetworkSeparation(t *testing.T) {
 		cfg.ReconnectInterval = 150 * time.Second
 		var agent Agent
 		if i%2 == 0 {
-			opt := JoinNetwork(_blockNetwork, _actionNetwork)
+			opt := JoinSubnet(_blockNetwork, _actionNetwork)
 			agent = NewAgent(cfg, 1, hash.ZeroHash256, b(uint8(i)), u, opt)
 		} else {
-			opt := JoinNetwork(_blockNetwork, _consensusNetwork)
+			opt := JoinSubnet(_blockNetwork, _consensusNetwork)
 			agent = NewAgent(cfg, 1, hash.ZeroHash256, b(uint8(i)), u, opt)
 		}
 		agent.Start(ctx)
@@ -166,27 +166,27 @@ func TestNetworkSeparation(t *testing.T) {
 	t.Run("connectedPeers", func(t *testing.T) {
 		for i := 0; i < n; i++ {
 			if i%2 == 0 {
-				peers, err := agents[i].NetworkProxy(_actionNetwork).ConnectedPeers()
+				peers, err := agents[i].Subnet(_actionNetwork).ConnectedPeers()
 				require.NoError(err)
 				require.Len(peers, n/2-1)
-				peers, err = agents[i].NetworkProxy(_consensusNetwork).ConnectedPeers()
+				peers, err = agents[i].Subnet(_consensusNetwork).ConnectedPeers()
 				require.NoError(err)
 				require.Len(peers, n/2)
-				peers, err = agents[i].NetworkProxy(_blockNetwork).ConnectedPeers()
+				peers, err = agents[i].Subnet(_blockNetwork).ConnectedPeers()
 				require.NoError(err)
 				require.Len(peers, n-1)
 			} else {
-				peers, err := agents[i].NetworkProxy(_actionNetwork).ConnectedPeers()
+				peers, err := agents[i].Subnet(_actionNetwork).ConnectedPeers()
 				require.NoError(err)
 				require.Len(peers, n/2)
-				peers, err = agents[i].NetworkProxy(_consensusNetwork).ConnectedPeers()
+				peers, err = agents[i].Subnet(_consensusNetwork).ConnectedPeers()
 				require.NoError(err)
 				require.Len(peers, n/2-1)
-				peers, err = agents[i].NetworkProxy(_blockNetwork).ConnectedPeers()
+				peers, err = agents[i].Subnet(_blockNetwork).ConnectedPeers()
 				require.NoError(err)
 				require.Len(peers, n-1)
 			}
-			peers, err := agents[i].NetworkProxy("unknown").ConnectedPeers()
+			peers, err := agents[i].Subnet("unknown").ConnectedPeers()
 			require.NoError(err)
 			require.Len(peers, 0)
 			peers, err = agents[i].ConnectedPeers()
@@ -198,7 +198,7 @@ func TestNetworkSeparation(t *testing.T) {
 	t.Run("broadcastSubscribed", func(t *testing.T) {
 		resetCounts()
 		for i := 0; i < n; i++ {
-			require.NoError(agents[i].NetworkProxy(_blockNetwork).BroadcastOutbound(ctx, &testingpb.TestPayload{
+			require.NoError(agents[i].Subnet(_blockNetwork).BroadcastOutbound(ctx, &testingpb.TestPayload{
 				MsgBody: []byte{uint8(i)},
 			}))
 		}
@@ -214,7 +214,7 @@ func TestNetworkSeparation(t *testing.T) {
 
 	t.Run("broadcastUnsubscribed", func(t *testing.T) {
 		resetCounts()
-		require.NoError(agents[0].NetworkProxy(_consensusNetwork).BroadcastOutbound(ctx, &testingpb.TestPayload{
+		require.NoError(agents[0].Subnet(_consensusNetwork).BroadcastOutbound(ctx, &testingpb.TestPayload{
 			MsgBody: []byte{uint8(0)},
 		}))
 		for i := 1; i < n; i++ {
@@ -236,7 +236,7 @@ func TestNetworkSeparation(t *testing.T) {
 
 	t.Run("broadcastUnsubscribedWithNoPeers", func(t *testing.T) {
 		resetCounts()
-		err := agents[0].NetworkProxy("unknown").BroadcastOutbound(ctx, &testingpb.TestPayload{
+		err := agents[0].Subnet("unknown").BroadcastOutbound(ctx, &testingpb.TestPayload{
 			MsgBody: []byte{uint8(0)},
 		})
 		require.True(errors.Is(err, p2p.ErrNoConnectedPeers))
@@ -284,17 +284,17 @@ func TestUnicast(t *testing.T) {
 			BootstrapNodes:    []string{addrs[0].String()},
 			ReconnectInterval: 150 * time.Second,
 			MasterKey:         strconv.Itoa(i),
-		}, 2, hash.ZeroHash256, b, u, JoinNetwork(_blockNetwork))
+		}, 2, hash.ZeroHash256, b, u, JoinSubnet(_blockNetwork))
 		r.NoError(agent.Start(ctx))
 		agents = append(agents, agent)
 	}
 
 	for i := 0; i < n; i++ {
-		neighbors, err := agents[i].NetworkProxy(_blockNetwork).ConnectedPeers()
+		neighbors, err := agents[i].Subnet(_blockNetwork).ConnectedPeers()
 		r.NoError(err)
 		r.True(len(neighbors) >= n/3)
 		for _, neighbor := range neighbors {
-			r.NoError(agents[i].NetworkProxy(_blockNetwork).UnicastOutbound(ctx, neighbor, &testingpb.TestPayload{
+			r.NoError(agents[i].Subnet(_blockNetwork).UnicastOutbound(ctx, neighbor, &testingpb.TestPayload{
 				MsgBody: []byte{uint8(i)},
 			}))
 		}

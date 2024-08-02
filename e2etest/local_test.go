@@ -124,8 +124,8 @@ func TestLocalCommit(t *testing.T) {
 		},
 		func(_ context.Context, _ uint32, _ peer.AddrInfo, _ proto.Message) {
 		},
-		p2p.JoinNetwork(chainservice.CompatibleNetwork),
-	).NetworkProxy(chainservice.CompatibleNetwork)
+		p2p.JoinSubnet(chainservice.CompatibleNetwork),
+	).Subnet(chainservice.CompatibleNetwork)
 	require.NotNil(p)
 	require.NoError(p.Start(ctx))
 	defer func() {
@@ -330,7 +330,7 @@ func TestLocalSync(t *testing.T) {
 		hash.ZeroHash256,
 		func(_ context.Context, _ uint32, _ string, msg proto.Message) {},
 		func(_ context.Context, _ uint32, _ peer.AddrInfo, _ proto.Message) {},
-		p2p.JoinNetwork(chainservice.CompatibleNetwork),
+		p2p.JoinSubnet(chainservice.CompatibleNetwork),
 	)
 	require.NoError(bootnode.Start(ctx))
 	addrs, err := bootnode.Self()
@@ -404,7 +404,7 @@ func TestLocalSync(t *testing.T) {
 	}()
 
 	err = testutil.WaitUntil(time.Millisecond*100, time.Second*60, func() (bool, error) {
-		peers, err := svr.P2PAgent().NetworkProxy(chainservice.CompatibleNetwork).ConnectedPeers()
+		peers, err := svr.P2PAgent().Subnet(chainservice.CompatibleNetwork).ConnectedPeers()
 		return len(peers) >= 1, err
 	})
 	require.NoError(err)
