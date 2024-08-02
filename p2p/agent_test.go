@@ -90,7 +90,7 @@ func TestBroadcast(t *testing.T) {
 			ReconnectInterval: 150 * time.Second,
 			MaxMessageSize:    p2p.DefaultConfig.MaxMessageSize,
 		}, 1, hash.ZeroHash256, b, u, JoinSubnet(_blockNetwork))
-		agent.Start(ctx)
+		r.NoError(agent.Start(ctx))
 		agents = append(agents, agent)
 	}
 
@@ -273,26 +273,35 @@ func TestUnicast(t *testing.T) {
 		}
 		src = peer.ID.Pretty()
 	}
-
-	bootnode, err := p2p.NewHost(context.Background(), p2p.DHTProtocolID(2), p2p.Port(testutil.RandomPort()), p2p.SecureIO(), p2p.MasterKey("bootnode"))
+	chainID := uint32(1)
+	bootnodePort := testutil.RandomPort()
+	bootnode, err := p2p.NewHost(context.Background(), p2p.DHTProtocolID(chainID), p2p.Port(bootnodePort), p2p.SecureIO(), p2p.MasterKey("bootnode"))
 	r.NoError(err)
 	addrs := bootnode.Addresses()
 	for i := 0; i < n; i++ {
+		port := bootnodePort + i + 1
 		agent := NewAgent(Config{
 			Host:              "127.0.0.1",
-			Port:              testutil.RandomPort(),
+			Port:              port,
 			BootstrapNodes:    []string{addrs[0].String()},
 			ReconnectInterval: 150 * time.Second,
 			MasterKey:         strconv.Itoa(i),
-		}, 2, hash.ZeroHash256, b, u, JoinSubnet(_blockNetwork))
+			MaxMessageSize:    p2p.DefaultConfig.MaxMessageSize,
+		}, chainID, hash.ZeroHash256, b, u, JoinSubnet(_blockNetwork))
 		r.NoError(agent.Start(ctx))
 		agents = append(agents, agent)
 	}
 
 	for i := 0; i < n; i++ {
-		neighbors, err := agents[i].Subnet(_blockNetwork).ConnectedPeers()
+		var (
+			neighbors []peer.AddrInfo
+			err       error
+		)
+		err = testutil.WaitUntil(100*time.Millisecond, 2*time.Second, func() (bool, error) {
+			neighbors, err = agents[i].Subnet(_blockNetwork).ConnectedPeers()
+			return len(neighbors) >= n/3, err
+		})
 		r.NoError(err)
-		r.True(len(neighbors) >= n/3)
 		for _, neighbor := range neighbors {
 			r.NoError(agents[i].Subnet(_blockNetwork).UnicastOutbound(ctx, neighbor, &testingpb.TestPayload{
 				MsgBody: []byte{uint8(i)},
