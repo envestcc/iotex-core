@@ -177,13 +177,23 @@ func newParams(
 	if err != nil {
 		return nil, err
 	}
-
+	txCtx := vm.TxContext{
+		Origin:   executorAddr,
+		GasPrice: execution.GasPrice(),
+	}
+	if g.IsVanuatu(blkCtx.BlockHeight) {
+		// TODO: enable EIP-4844 blobhash opcode
+		hasBlob := false
+		if hasBlob {
+			txCtx.BlobFeeCap = big.NewInt(0)
+			txCtx.BlobHashes = []common.Hash{}
+		}
+		// TODO: enable EIP-7516 blobbasefee opcode
+		context.BlobBaseFee = big.NewInt(0)
+	}
 	return &Params{
 		context,
-		vm.TxContext{
-			Origin:   executorAddr,
-			GasPrice: execution.GasPrice(),
-		},
+		txCtx,
 		execution.Nonce(),
 		execution.Value(),
 		execution.To(),
@@ -394,6 +404,13 @@ func getChainConfig(g genesis.Blockchain, height uint64, id uint32, getBlockTime
 	}
 	sumatraTimestamp := (uint64)(sumatraTime.Unix())
 	chainConfig.ShanghaiTime = &sumatraTimestamp
+	// Cancun
+	cancunTime, err := getBlockTime(g.VanuatuBlockHeight)
+	if err != nil {
+		return nil, err
+	}
+	cancunTimestamp := (uint64)(cancunTime.Unix())
+	chainConfig.CancunTime = &cancunTimestamp
 	return &chainConfig, nil
 }
 
