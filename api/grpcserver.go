@@ -339,7 +339,7 @@ func (svr *gRPCHandler) GetReceiptByAction(ctx context.Context, in *iotexapi.Get
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	receipt, err := svr.coreService.ReceiptByActionHash(actHash)
+	receipt, err := svr.coreService.ReceiptByActionHash(context.Background(), actHash)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, err.Error())
 	}

@@ -207,7 +207,7 @@ func (svr *web3Handler) handleWeb3Req(ctx context.Context, web3Req *gjson.Result
 	case "eth_getBlockTransactionCountByNumber":
 		res, err = svr.getBlockTransactionCountByNumber(web3Req)
 	case "eth_getTransactionReceipt":
-		res, err = svr.getTransactionReceipt(web3Req)
+		res, err = svr.getTransactionReceipt(ctx, web3Req)
 	case "eth_getStorageAt":
 		res, err = svr.getStorageAt(web3Req)
 	case "eth_getFilterLogs":
@@ -624,9 +624,9 @@ func (svr *web3Handler) getTransactionByHash(in *gjson.Result) (interface{}, err
 		return nil, err
 	}
 
-	selp, blk, _, err := svr.coreService.ActionByActionHash(actHash)
+	selp, blk, _, err := svr.coreService.ActionByActionHash(context.Background(), actHash)
 	if err == nil {
-		receipt, err := svr.coreService.ReceiptByActionHash(actHash)
+		receipt, err := svr.coreService.ReceiptByActionHash(context.Background(), actHash)
 		if err == nil {
 			return svr.assembleConfirmedTransaction(blk.HashBlock(), selp, receipt)
 		}
@@ -656,7 +656,7 @@ func (svr *web3Handler) getLogs(filter *filterObject) (interface{}, error) {
 	return svr.getLogsWithFilter(from, to, filter.Address, filter.Topics)
 }
 
-func (svr *web3Handler) getTransactionReceipt(in *gjson.Result) (interface{}, error) {
+func (svr *web3Handler) getTransactionReceipt(ctx context.Context, in *gjson.Result) (interface{}, error) {
 	// parse action hash from request
 	actHashStr := in.Get("params.0")
 	if !actHashStr.Exists() {
@@ -668,14 +668,14 @@ func (svr *web3Handler) getTransactionReceipt(in *gjson.Result) (interface{}, er
 	}
 
 	// acquire action receipt by action hash
-	selp, blk, _, err := svr.coreService.ActionByActionHash(actHash)
+	selp, blk, _, err := svr.coreService.ActionByActionHash(ctx, actHash)
 	if err != nil {
 		if errors.Cause(err) == ErrNotFound {
 			return nil, nil
 		}
 		return nil, err
 	}
-	receipt, err := svr.coreService.ReceiptByActionHash(actHash)
+	receipt, err := svr.coreService.ReceiptByActionHash(ctx, actHash)
 	if err != nil {
 		if errors.Cause(err) == ErrNotFound {
 			return nil, nil

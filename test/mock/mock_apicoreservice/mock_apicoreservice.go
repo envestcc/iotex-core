@@ -79,9 +79,9 @@ func (mr *MockCoreServiceMockRecorder) Action(actionHash, checkPending interface
 }
 
 // ActionByActionHash mocks base method.
-func (m *MockCoreService) ActionByActionHash(h hash.Hash256) (*action.SealedEnvelope, *block.Block, uint32, error) {
+func (m *MockCoreService) ActionByActionHash(ctx context.Context, h hash.Hash256) (*action.SealedEnvelope, *block.Block, uint32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActionByActionHash", h)
+	ret := m.ctrl.Call(m, "ActionByActionHash", ctx, h)
 	ret0, _ := ret[0].(*action.SealedEnvelope)
 	ret1, _ := ret[1].(*block.Block)
 	ret2, _ := ret[2].(uint32)
@@ -90,9 +90,9 @@ func (m *MockCoreService) ActionByActionHash(h hash.Hash256) (*action.SealedEnve
 }
 
 // ActionByActionHash indicates an expected call of ActionByActionHash.
-func (mr *MockCoreServiceMockRecorder) ActionByActionHash(h interface{}) *gomock.Call {
+func (mr *MockCoreServiceMockRecorder) ActionByActionHash(ctx, h interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActionByActionHash", reflect.TypeOf((*MockCoreService)(nil).ActionByActionHash), h)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActionByActionHash", reflect.TypeOf((*MockCoreService)(nil).ActionByActionHash), ctx, h)
 }
 
 // Actions mocks base method.
@@ -492,18 +492,18 @@ func (mr *MockCoreServiceMockRecorder) ReadState(protocolID, height, methodName,
 }
 
 // ReceiptByActionHash mocks base method.
-func (m *MockCoreService) ReceiptByActionHash(h hash.Hash256) (*action.Receipt, error) {
+func (m *MockCoreService) ReceiptByActionHash(ctx context.Context, h hash.Hash256) (*action.Receipt, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReceiptByActionHash", h)
+	ret := m.ctrl.Call(m, "ReceiptByActionHash", ctx, h)
 	ret0, _ := ret[0].(*action.Receipt)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReceiptByActionHash indicates an expected call of ReceiptByActionHash.
-func (mr *MockCoreServiceMockRecorder) ReceiptByActionHash(h interface{}) *gomock.Call {
+func (mr *MockCoreServiceMockRecorder) ReceiptByActionHash(ctx, h interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiptByActionHash", reflect.TypeOf((*MockCoreService)(nil).ReceiptByActionHash), h)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiptByActionHash", reflect.TypeOf((*MockCoreService)(nil).ReceiptByActionHash), ctx, h)
 }
 
 // ReceiveBlock mocks base method.

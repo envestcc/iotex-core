@@ -634,8 +634,8 @@ func TestGetTransactionByHash(t *testing.T) {
 		AddActions(selp).
 		SignAndBuild(identityset.PrivateKey(0))
 	require.NoError(err)
-	core.EXPECT().ActionByActionHash(gomock.Any()).Return(selp, &blk, uint32(0), nil)
-	core.EXPECT().ReceiptByActionHash(gomock.Any()).Return(receipt, nil)
+	core.EXPECT().ActionByActionHash(context.Background(), gomock.Any()).Return(selp, &blk, uint32(0), nil)
+	core.EXPECT().ReceiptByActionHash(context.Background(), gomock.Any()).Return(receipt, nil)
 	core.EXPECT().EVMNetworkID().Return(uint32(0))
 
 	inNil := gjson.Parse(`{"params":[]}`)
@@ -650,7 +650,7 @@ func TestGetTransactionByHash(t *testing.T) {
 	require.Equal(receipt, rlt.receipt)
 
 	// get pending transaction
-	core.EXPECT().ActionByActionHash(gomock.Any()).Return(nil, nil, uint32(0), ErrNotFound)
+	core.EXPECT().ActionByActionHash(context.Background(), gomock.Any()).Return(nil, nil, uint32(0), ErrNotFound)
 	core.EXPECT().PendingActionByActionHash(gomock.Any()).Return(selp, nil)
 	core.EXPECT().EVMNetworkID().Return(uint32(0))
 	ret, err = web3svr.getTransactionByHash(&in)
@@ -665,7 +665,7 @@ func TestGetTransactionByHash(t *testing.T) {
 	require.NoError(err)
 	txHash, err = selp.Hash()
 	require.NoError(err)
-	core.EXPECT().ActionByActionHash(gomock.Any()).Return(nil, nil, uint32(0), ErrNotFound)
+	core.EXPECT().ActionByActionHash(context.Background(), gomock.Any()).Return(nil, nil, uint32(0), ErrNotFound)
 	core.EXPECT().PendingActionByActionHash(gomock.Any()).Return(selp, nil)
 	core.EXPECT().EVMNetworkID().Return(uint32(0))
 	ret, err = web3svr.getTransactionByHash(&in)
@@ -753,18 +753,18 @@ func TestGetTransactionReceipt(t *testing.T) {
 		AddActions(selp).
 		SignAndBuild(identityset.PrivateKey(0))
 	require.NoError(err)
-	core.EXPECT().ActionByActionHash(gomock.Any()).Return(selp, &blk, uint32(0), nil)
-	core.EXPECT().ReceiptByActionHash(gomock.Any()).Return(receipt, nil)
+	core.EXPECT().ActionByActionHash(context.Background(), gomock.Any()).Return(selp, &blk, uint32(0), nil)
+	core.EXPECT().ReceiptByActionHash(context.Background(), gomock.Any()).Return(receipt, nil)
 
 	t.Run("nil params", func(t *testing.T) {
 		inNil := gjson.Parse(`{"params":[]}`)
-		_, err := web3svr.getTransactionReceipt(&inNil)
+		_, err := web3svr.getTransactionReceipt(context.Background(), &inNil)
 		require.EqualError(err, errInvalidFormat.Error())
 	})
 
 	t.Run("get tx", func(t *testing.T) {
 		in := gjson.Parse(fmt.Sprintf(`{"params":["0x%s", true]}`, hex.EncodeToString(txHash[:])))
-		ret, err := web3svr.getTransactionReceipt(&in)
+		ret, err := web3svr.getTransactionReceipt(context.Background(), &in)
 		require.NoError(err)
 		rlt, ok := ret.(*getReceiptResult)
 		require.True(ok)

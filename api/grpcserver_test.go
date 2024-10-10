@@ -418,7 +418,7 @@ func TestGrpcServer_GetReceiptByAction(t *testing.T) {
 	}
 
 	t.Run("get receipt by action", func(t *testing.T) {
-		core.EXPECT().ReceiptByActionHash(gomock.Any()).Return(receipt, nil)
+		core.EXPECT().ReceiptByActionHash(context.Background(), gomock.Any()).Return(receipt, nil)
 		core.EXPECT().BlockHashByBlockHeight(gomock.Any()).Return(hash.ZeroHash256, nil)
 
 		res, err := grpcSvr.GetReceiptByAction(context.Background(), &iotexapi.GetReceiptByActionRequest{})
@@ -434,7 +434,7 @@ func TestGrpcServer_GetReceiptByAction(t *testing.T) {
 
 	t.Run("failed to get block hash by block height", func(t *testing.T) {
 		expectedErr := errors.New("failed to get block hash by block height")
-		core.EXPECT().ReceiptByActionHash(gomock.Any()).Return(receipt, nil)
+		core.EXPECT().ReceiptByActionHash(context.Background(), gomock.Any()).Return(receipt, nil)
 		core.EXPECT().BlockHashByBlockHeight(gomock.Any()).Return(hash.ZeroHash256, expectedErr)
 
 		_, err := grpcSvr.GetReceiptByAction(context.Background(), &iotexapi.GetReceiptByActionRequest{})
@@ -443,7 +443,7 @@ func TestGrpcServer_GetReceiptByAction(t *testing.T) {
 
 	t.Run("failed to get reciept by action hash", func(t *testing.T) {
 		expectedErr := errors.New("failed to get reciept by action hash")
-		core.EXPECT().ReceiptByActionHash(gomock.Any()).Return(receipt, expectedErr)
+		core.EXPECT().ReceiptByActionHash(context.Background(), gomock.Any()).Return(receipt, expectedErr)
 
 		_, err := grpcSvr.GetReceiptByAction(context.Background(), &iotexapi.GetReceiptByActionRequest{})
 		require.Contains(err.Error(), expectedErr.Error())

@@ -102,7 +102,7 @@ type (
 		// ElectionBuckets returns the native election buckets.
 		ElectionBuckets(epochNum uint64) ([]*iotextypes.ElectionBucket, error)
 		// ReceiptByActionHash returns receipt by action hash
-		ReceiptByActionHash(h hash.Hash256) (*action.Receipt, error)
+		ReceiptByActionHash(ctx context.Context, h hash.Hash256) (*action.Receipt, error)
 		// TransactionLogByActionHash returns transaction log by action hash
 		TransactionLogByActionHash(actHash string) (*iotextypes.TransactionLog, error)
 		// TransactionLogByBlockHeight returns transaction log by block height
@@ -120,7 +120,7 @@ type (
 		// ActionsByAddress returns all actions associated with an address
 		ActionsByAddress(addr address.Address, start uint64, count uint64) ([]*iotexapi.ActionInfo, error)
 		// ActionByActionHash returns action by action hash
-		ActionByActionHash(h hash.Hash256) (*action.SealedEnvelope, *block.Block, uint32, error)
+		ActionByActionHash(ctx context.Context, h hash.Hash256) (*action.SealedEnvelope, *block.Block, uint32, error)
 		// PendingActionByActionHash returns action by action hash
 		PendingActionByActionHash(h hash.Hash256) (*action.SealedEnvelope, error)
 		// ActPoolActions returns the all Transaction Identifiers in the actpool
@@ -788,16 +788,20 @@ func (core *coreService) ElectionBuckets(epochNum uint64) ([]*iotextypes.Electio
 }
 
 // ReceiptByActionHash returns receipt by action hash
-func (core *coreService) ReceiptByActionHash(h hash.Hash256) (*action.Receipt, error) {
+func (core *coreService) ReceiptByActionHash(ctx context.Context, h hash.Hash256) (*action.Receipt, error) {
 	if core.indexer == nil {
 		return nil, status.Error(codes.NotFound, blockindex.ErrActionIndexNA.Error())
 	}
 
+	span := tracer.SpanFromContext(ctx)
+	defer span.End()
+	span.AddEvent("ReceiptByActionHash.1")
 	actIndex, err := core.indexer.GetActionIndex(h[:])
 	if err != nil {
 		return nil, errors.Wrap(ErrNotFound, err.Error())
 	}
 
+	span.AddEvent("ReceiptByActionHash.2")
 	receipts, err := core.dao.GetReceipts(actIndex.BlockHeight())
 	if err != nil {
 		return nil, err
@@ -1101,15 +1105,19 @@ func (core *coreService) BlockHashByBlockHeight(blkHeight uint64) (hash.Hash256,
 }
 
 // ActionByActionHash returns action by action hash
-func (core *coreService) ActionByActionHash(h hash.Hash256) (*action.SealedEnvelope, *block.Block, uint32, error) {
+func (core *coreService) ActionByActionHash(ctx context.Context, h hash.Hash256) (*action.SealedEnvelope, *block.Block, uint32, error) {
 	if err := core.checkActionIndex(); err != nil {
 		return nil, nil, 0, status.Error(codes.NotFound, blockindex.ErrActionIndexNA.Error())
 	}
 
+	span := tracer.SpanFromContext(ctx)
+	defer span.End()
+	span.AddEvent("ActionByActionHash.1")
 	actIndex, err := core.indexer.GetActionIndex(h[:])
 	if err != nil {
 		return nil, nil, 0, errors.Wrap(ErrNotFound, err.Error())
 	}
+	span.AddEvent("ActionByActionHash.2")
 	blk, err := core.dao.GetBlockByHeight(actIndex.BlockHeight())
 	if err != nil {
 		return nil, nil, 0, errors.Wrap(ErrNotFound, err.Error())
@@ -1302,7 +1310,7 @@ func (core *coreService) pendingAction(selp *action.SealedEnvelope) (*iotexapi.A
 }
 
 func (core *coreService) getAction(actHash hash.Hash256, checkPending bool) (*iotexapi.ActionInfo, error) {
-	selp, blk, actIndex, err := core.ActionByActionHash(actHash)
+	selp, blk, actIndex, err := core.ActionByActionHash(context.Background(), actHash)
 	if err == nil {
 		act, err := core.committedAction(selp, blk.HashBlock(), blk.Height())
 		if err != nil {
