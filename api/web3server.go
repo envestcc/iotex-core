@@ -138,6 +138,8 @@ func (svr *web3Handler) HandlePOSTReq(ctx context.Context, reader io.Reader, wri
 }
 
 func (svr *web3Handler) handleWeb3Req(ctx context.Context, web3Req *gjson.Result, writer apitypes.Web3ResponseWriter) error {
+	span := tracer.SpanFromContext(ctx)
+	span.AddEvent("handleWeb3Req.1")
 	var (
 		res       interface{}
 		err, err1 error
@@ -149,6 +151,7 @@ func (svr *web3Handler) handleWeb3Req(ctx context.Context, web3Req *gjson.Result
 	log.T(ctx).Debug("handleWeb3Req", zap.String("method", method.(string)), zap.String("requestParams", fmt.Sprintf("%+v", web3Req)))
 	_web3ServerMtc.WithLabelValues(method.(string)).Inc()
 	_web3ServerMtc.WithLabelValues("requests_total").Inc()
+	span.AddEvent("handleWeb3Req.2")
 	switch method {
 	case "eth_accounts":
 		res, err = svr.ethAccounts()

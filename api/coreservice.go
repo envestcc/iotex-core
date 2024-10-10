@@ -794,7 +794,6 @@ func (core *coreService) ReceiptByActionHash(ctx context.Context, h hash.Hash256
 	}
 
 	span := tracer.SpanFromContext(ctx)
-	defer span.End()
 	span.AddEvent("ReceiptByActionHash.1")
 	actIndex, err := core.indexer.GetActionIndex(h[:])
 	if err != nil {
@@ -806,6 +805,7 @@ func (core *coreService) ReceiptByActionHash(ctx context.Context, h hash.Hash256
 	if err != nil {
 		return nil, err
 	}
+	span.AddEvent("ReceiptByActionHash.3")
 	if receipt := filterReceipts(receipts, h); receipt != nil {
 		return receipt, nil
 	}
@@ -1111,7 +1111,6 @@ func (core *coreService) ActionByActionHash(ctx context.Context, h hash.Hash256)
 	}
 
 	span := tracer.SpanFromContext(ctx)
-	defer span.End()
 	span.AddEvent("ActionByActionHash.1")
 	actIndex, err := core.indexer.GetActionIndex(h[:])
 	if err != nil {
@@ -1122,10 +1121,12 @@ func (core *coreService) ActionByActionHash(ctx context.Context, h hash.Hash256)
 	if err != nil {
 		return nil, nil, 0, errors.Wrap(ErrNotFound, err.Error())
 	}
+	span.AddEvent("ActionByActionHash.3")
 	selp, index, err := blk.ActionByHash(h)
 	if err != nil {
 		return nil, nil, 0, errors.Wrap(ErrNotFound, err.Error())
 	}
+	span.AddEvent("ActionByActionHash.4")
 	return selp, blk, index, nil
 }
 
