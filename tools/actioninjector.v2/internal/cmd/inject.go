@@ -25,7 +25,9 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/iotexproject/go-pkgs/crypto"
 	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/iotex-address/address"
@@ -58,7 +60,8 @@ type (
 	}
 
 	injectProcessor struct {
-		api iotexapi.APIServiceClient
+		api    iotexapi.APIServiceClient
+		ethcli *ethclient.Client
 		// nonces         *ttl.Cache
 		// accounts       []*util.AddressKey
 		accountManager *util.AccountManager
@@ -78,8 +81,10 @@ type (
 		time   int64
 	}
 	WrapSealedEnvelope struct {
-		Time           int64
-		SealedEnvelope *action.SealedEnvelope
+		Time int64
+		// SealedEnvelope *action.SealedEnvelope
+		SignedTx *types.Transaction
+		Sender   *util.AddressKey
 	}
 )
 
@@ -112,8 +117,21 @@ const (
 func newInjectionProcessor() (*injectProcessor, error) {
 	var conn *grpc.ClientConn
 	var err error
-	grpcctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	p := &injectProcessor{}
 	log.L().Info("Server Addr", zap.String("endpoint", rawInjectCfg.serverAddr))
+	// eth api
+	cli, err := ethclient.Dial(rawInjectCfg.httpServerAddr)
+	if err != nil {
+		return nil, err
+	}
+	p.ethcli = cli
+	chainID, err := cli.ChainID(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	log.L().Info("server evm chain id", zap.Int("id", int(chainID.Int64())))
+	// grpc api
+	grpcctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	if rawInjectCfg.insecure {
 		conn, err = grpc.DialContext(grpcctx, rawInjectCfg.serverAddr, grpc.WithBlock(), grpc.WithInsecure())
 	} else {
@@ -127,9 +145,13 @@ func newInjectionProcessor() (*injectProcessor, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &injectProcessor{
-		api: api,
+	resp, err := api.GetChainMeta(context.Background(), &iotexapi.GetChainMetaRequest{})
+	if err != nil {
+		return nil, err
 	}
+	rawInjectCfg.chainID = resp.ChainMeta.ChainID
+	log.L().Info("set chainID", zap.Uint32("chainID", rawInjectCfg.chainID))
+	p.api = api
 	p.randAccounts(rawInjectCfg.randAccounts)
 	loadValue, _ := new(big.Int).SetString(rawInjectCfg.loadTokenAmount, 10)
 	if loadValue.BitLen() != 0 {
@@ -250,7 +272,7 @@ func parseHumanSize(s string) int64 {
 	}
 }
 
-func (p *injectProcessor) injectProcess(ctx context.Context, actionType int) {
+func (p *injectProcessor) injectProcess(ctx context.Context, actionType, commonType int) {
 	var (
 		transferGaslimit  = rawInjectCfg.transferGasLimit
 		transferGasPrice  = big.NewInt(rawInjectCfg.transferGasPrice)
@@ -283,7 +305,7 @@ func (p *injectProcessor) injectProcess(ctx context.Context, actionType int) {
 	}
 	contract = rawInjectCfg.contract
 
-	go p.txGenerate(ctx, bufferedTxs, actionType, transferGaslimit, transferGasPrice, executionGasLimit, executionGasPrice, transferPayload, executionData, contract)
+	go p.txGenerate(ctx, bufferedTxs, actionType, commonType, transferGaslimit, transferGasPrice, executionGasLimit, executionGasPrice, transferPayload, executionData, contract)
 	go p.Injection(ctx, bufferedTxs)
 }
 
@@ -367,7 +389,7 @@ func methodSignToID(sign string) []byte {
 func (p *injectProcessor) txGenerate(
 	ctx context.Context,
 	ch chan WrapSealedEnvelope,
-	actionType int,
+	actionType, commonType int,
 	transferGasLimit uint64,
 	transferGasPrice *big.Int,
 	executionGasLimit uint64,
@@ -382,12 +404,12 @@ func (p *injectProcessor) txGenerate(
 			gasPriceX := loadAtomicGasPriceMultiplier()
 			transferGasPriceUpdated := big.NewInt(int64(float64(transferGasPrice.Int64()) * gasPriceX))
 			executionGasPriceUpdated := big.NewInt(int64(float64(executionGasPrice.Int64()) * gasPriceX))
-			tx, err := util.ActionGenerator(actionType, p.accountManager, rawInjectCfg.chainID, transferGasLimit, transferGasPriceUpdated, executionGasLimit, executionGasPriceUpdated, contractAddr, transferPayload, executionPayloadGen2())
+			tx, sender, err := util.ActionGeneratorWeb3(actionType, commonType, p.accountManager, rawInjectCfg.chainID, rawInjectCfg.evmChainID, transferGasLimit, transferGasPriceUpdated, executionGasLimit, executionGasPriceUpdated, contractAddr, transferPayload, executionPayloadGen2())
 			if err != nil {
 				log.L().Error("no act", zap.Error(err))
 				continue
 			}
-			ch <- WrapSealedEnvelope{Time: time.Now().UnixNano(), SealedEnvelope: tx}
+			ch <- WrapSealedEnvelope{Time: time.Now().UnixNano(), SignedTx: tx, Sender: sender}
 		case <-ctx.Done():
 			return
 		}
@@ -498,8 +520,8 @@ func (p *injectProcessor) processFeedback(feed feedback) {
 }
 
 func (p *injectProcessor) inject(wrapSelp WrapSealedEnvelope) {
-	selp := wrapSelp.SealedEnvelope
-	sender := selp.SrcPubkey().Address().String()
+	selp := wrapSelp.SignedTx
+	sender := wrapSelp.Sender.EncodedAddr
 	nonceTime, ok := lastNonceTimes.Load(sender)
 	if ok {
 		if nonceTime.(int64) > wrapSelp.Time {
@@ -509,14 +531,15 @@ func (p *injectProcessor) inject(wrapSelp WrapSealedEnvelope) {
 
 	// actHash, _ := selp.Hash()
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	resp, err := p.api.SendAction(ctx, &iotexapi.SendActionRequest{Action: selp.Proto()})
+	err := p.ethcli.SendTransaction(ctx, selp)
+	// resp, err := p.api.SendAction(ctx, &iotexapi.SendActionRequest{Action: selp.Proto()})
 	if err != nil {
-		log.L().Error("Failed to inject.", zap.Error(err), zap.String("sender", selp.SenderAddress().String()), zap.Uint64("nonce", selp.Nonce()))
+		log.L().Error("Failed to inject.", zap.Error(err), zap.String("sender", sender), zap.Uint64("nonce", selp.Nonce()))
 		atomic.AddUint64(&_injectedErrActs, 1)
 		p.processFeedback(feedback{err: err, sender: sender, time: wrapSelp.Time})
 	} else {
 		// _injectedActHashes = append(_injectedActHashes, actHash)
-		log.L().Info("Success to inject", zap.String("hash", resp.ActionHash), zap.String("sender", selp.SenderAddress().String()), zap.Uint64("nonce", selp.Nonce()))
+		log.L().Info("Success to inject", zap.String("hash", selp.Hash().String()), zap.String("sender", sender), zap.Uint64("nonce", selp.Nonce()))
 	}
 	atomic.AddUint64(&_injectedActs, 1)
 	// log.L().Info("act hash", zap.String("hash", hex.EncodeToString(actHash[:])), zap.Uint64("totalActs", atomic.LoadUint64(&_injectedActs)), zap.String("sender", sender), zap.Uint64("nonce", selp.Nonce()))
@@ -622,7 +645,18 @@ var injectCmd = &cobra.Command{
 		default:
 			actiontype = actionTypeTransfer
 		}
-		go p.injectProcess(ctx, actiontype)
+		var commonType int
+		switch rawInjectCfg.commonType {
+		case "accesslist":
+			commonType = action.AccessListTxType
+		case "dynamicfee":
+			commonType = action.DynamicFeeTxType
+		case "blob":
+			commonType = action.BlobTxType
+		default:
+			commonType = action.LegacyTxType
+		}
+		go p.injectProcess(ctx, actiontype, commonType)
 		<-ctx.Done()
 		if rawInjectCfg.checkReceipt {
 			time.Sleep(5 * time.Minute)
@@ -649,6 +683,7 @@ var injectCmd = &cobra.Command{
 var rawInjectCfg = struct {
 	configPath          string
 	serverAddr          string
+	httpServerAddr      string
 	transferGasLimit    uint64
 	transferGasPrice    int64
 	transferAmount      int64
@@ -661,6 +696,7 @@ var rawInjectCfg = struct {
 	executionGasPrice int64
 
 	actionType    string
+	commonType    string
 	retryNum      uint64
 	retryInterval int
 	duration      time.Duration
@@ -670,6 +706,7 @@ var rawInjectCfg = struct {
 	checkReceipt  bool
 	insecure      bool
 	chainID       uint32
+	evmChainID    uint32
 
 	randAccounts    int
 	loadTokenAmount string
@@ -682,7 +719,9 @@ func init() {
 	// flag.StringVar(&rawInjectCfg.serverAddr, "addr", "ab0ab34e44e114ae5b0ee35da91c8422-1001689351.eu-west-2.elb.amazonaws.com:14014", "target ip:port for grpc connection")
 	// flag.StringVar(&rawInjectCfg.serverAddr, "addr", "35.247.25.167:14014", "target ip:port for grpc connection")
 	flag.Uint32Var(&rawInjectCfg.chainID, "chain-id", 2, "chain id")
+	flag.Uint32Var(&rawInjectCfg.evmChainID, "evmchain-id", 4690, "evm chain id")
 	flag.StringVar(&rawInjectCfg.serverAddr, "addr", "api.testnet.iotex.one:443", "target ip:port for grpc connection")
+	flag.StringVar(&rawInjectCfg.httpServerAddr, "web3addr", "https://babel-api.testnet.iotex.io", "target ip:port for web3 connection")
 	flag.Int64Var(&rawInjectCfg.transferAmount, "transfer-amount", 0, "transfer amount")
 	flag.Uint64Var(&rawInjectCfg.transferGasLimit, "transfer-gas-limit", 20000, "transfer gas limit")
 	flag.Int64Var(&rawInjectCfg.transferGasPrice, "transfer-gas-price", 1000000000000, "transfer gas price")
@@ -693,6 +732,7 @@ func init() {
 	flag.Uint64Var(&rawInjectCfg.executionGasLimit, "execution-gas-limit", 100000, "execution gas limit")
 	flag.Int64Var(&rawInjectCfg.executionGasPrice, "execution-gas-price", 1000000000000, "execution gas price")
 	flag.StringVar(&rawInjectCfg.actionType, "action-type", "transfer", "action type to inject")
+	flag.StringVar(&rawInjectCfg.commonType, "common-type", "legacy", "common action type to inject")
 	flag.Uint64Var(&rawInjectCfg.retryNum, "retry-num", 3, "maximum number of rpc retries")
 	flag.IntVar(&rawInjectCfg.retryInterval, "retry-interval", 1, "sleep interval between two consecutive rpc retries")
 	flag.DurationVar(&rawInjectCfg.duration, "duration", 10*time.Minute, "duration when the injection will run")
