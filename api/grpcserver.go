@@ -108,6 +108,7 @@ func NewGRPCServer(core CoreService, bds *blockDAOService, grpcPort int) *GRPCSe
 	if bds != nil {
 		blockdaopb.RegisterBlockDAOServiceServer(gSvr, bds)
 	}
+	grpc_prometheus.EnableHandlingTimeHistogram()
 	grpc_prometheus.Register(gSvr)
 	reflection.Register(gSvr)
 	return &GRPCServer{
