@@ -63,6 +63,7 @@ type (
 		footerCache  cache.LRUCache
 		receiptCache cache.LRUCache
 		blockCache   cache.LRUCache
+		txLogCache   cache.LRUCache
 		heightToHash sync.Map
 		tipHeight    uint64
 	}
@@ -91,6 +92,7 @@ func NewBlockDAOWithIndexersAndCache(blkStore BlockDAO, indexers []BlockIndexer,
 		blockDAO.blockCache = cache.NewThreadSafeLruCacheWithOnEvicted(cacheSize, func(_ cache.Key, value interface{}) {
 			blockDAO.heightToHash.Delete(value.(*block.Block).Height())
 		})
+		blockDAO.txLogCache = cache.NewThreadSafeLruCache(cacheSize)
 	}
 	timerFactory, err := prometheustimer.New(
 		"iotex_block_dao_perf",
@@ -295,9 +297,19 @@ func (dao *blockDAO) ContainsTransactionLog() bool {
 }
 
 func (dao *blockDAO) TransactionLogs(height uint64) (*iotextypes.TransactionLogs, error) {
+	if logs, ok := lruCacheGet(dao.txLogCache, height); ok {
+		_cacheMtc.WithLabelValues("hit_txlog").Inc()
+		return logs.(*iotextypes.TransactionLogs), nil
+	}
+	_cacheMtc.WithLabelValues("miss_txlog").Inc()
 	timer := dao.timerFactory.NewTimer("get_transactionlog")
 	defer timer.End()
-	return dao.blockStore.TransactionLogs(height)
+	txLogs, err := dao.blockStore.TransactionLogs(height)
+	if err != nil {
+		return nil, err
+	}
+	lruCachePut(dao.txLogCache, height, txLogs)
+	return txLogs, nil
 }
 
 func (dao *blockDAO) PutBlock(ctx context.Context, blk *block.Block) error {
