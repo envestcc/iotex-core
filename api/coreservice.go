@@ -1121,6 +1121,9 @@ func (core *coreService) ActionByActionHash(ctx context.Context, h hash.Hash256)
 	if err != nil {
 		return nil, nil, 0, errors.Wrap(ErrNotFound, err.Error())
 	}
+	if actIndex.TxNumber() > 0 {
+		return blk.Actions[actIndex.TxNumber()], blk, actIndex.TxNumber(), nil
+	}
 	span.AddEvent("ActionByActionHash.3")
 	selp, index, err := blk.ActionByHash(h)
 	if err != nil {
