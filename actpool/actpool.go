@@ -419,7 +419,7 @@ func (ap *actPool) removeInvalidActs(acts []*action.SealedEnvelope) {
 			log.L().Debug("Skipping action due to hash error", zap.Error(err))
 			continue
 		}
-		log.L().Debug("Removed invalidated action.", log.Hex("hash", hash[:]))
+		log.L().Info("Removed invalidated action.", log.Hex("hash", hash[:]))
 		ap.allActions.Delete(hash)
 		intrinsicGas, _ := act.IntrinsicGas()
 		atomic.AddUint64(&ap.gasInPool, ^uint64(intrinsicGas-1))

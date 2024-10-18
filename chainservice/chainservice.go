@@ -7,10 +7,12 @@ package chainservice
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/iotexproject/iotex-election/committee"
@@ -100,10 +102,18 @@ func (cs *ChainService) HandleAction(ctx context.Context, actPb *iotextypes.Acti
 	if err != nil {
 		return err
 	}
+	txHash, err := act.Hash()
+	if err != nil {
+		return err
+	}
+	l := log.L().With(zap.String("actionHash", hex.EncodeToString(txHash[:])), zap.String("sign", hex.EncodeToString(act.Signature())))
+	l.Info("received action from network")
 	ctx = protocol.WithRegistry(ctx, cs.registry)
 	err = cs.actpool.Add(ctx, act)
 	if err != nil {
-		log.L().Debug(err.Error())
+		l.Warn("failed to add action to actpool", zap.Error(err))
+	} else {
+		l.Info("successfully added action to actpool")
 	}
 	return err
 }

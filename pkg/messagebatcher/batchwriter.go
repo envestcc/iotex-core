@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -173,8 +175,19 @@ func (bm *Manager) callback(ctx context.Context) {
 		select {
 		case msg := <-bm.outputQueue:
 			err := bm.messageHandler(msg)
+			acts, ok := msg.Data.(*iotextypes.Actions)
+			sign := ""
+			if ok {
+				signs := make([]string, 0, len(acts.Actions))
+				for _, act := range acts.Actions {
+					signs = append(signs, hex.EncodeToString(act.Signature))
+				}
+				sign = strings.Join(signs, ",")
+			}
 			if err != nil {
-				log.L().Error("fail to handle a batch message when calling back", zap.Error(err))
+				log.L().Error("fail to handle a batch message when calling back", zap.Error(err), zap.String("signatures", sign))
+			} else {
+				log.L().Info("successfully handle a batch message", zap.String("signatures", sign))
 			}
 		case <-ctx.Done():
 			return

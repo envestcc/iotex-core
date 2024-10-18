@@ -477,7 +477,7 @@ func (core *coreService) SendAction(ctx context.Context, in *iotextypes.Action) 
 	if err != nil {
 		return "", err
 	}
-	l := log.Logger("api").With(zap.String("actionHash", hex.EncodeToString(hash[:])))
+	l := log.Logger("api").With(zap.String("actionHash", hex.EncodeToString(hash[:])), zap.String("sign", hex.EncodeToString(selp.Signature())))
 	if err = core.ap.Add(ctx, selp); err != nil {
 		txBytes, serErr := proto.Marshal(in)
 		if serErr != nil {
@@ -500,6 +500,7 @@ func (core *coreService) SendAction(ctx context.Context, in *iotextypes.Action) 
 		}
 		return "", st.Err()
 	}
+	l.Info("action accepted")
 	// If there is no error putting into local actpool, broadcast it to the network
 	if core.messageBatcher != nil {
 		err = core.messageBatcher.Put(&batch.Message{
@@ -512,7 +513,10 @@ func (core *coreService) SendAction(ctx context.Context, in *iotextypes.Action) 
 	}
 	if err != nil {
 		l.Warn("Failed to broadcast SendAction request.", zap.Error(err))
+	} else {
+		l.Info("SendAction request broadcasted.")
 	}
+
 	return hex.EncodeToString(hash[:]), nil
 }
 
