@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/holiman/uint256"
+	"github.com/iotexproject/iotex-address/address"
 	"github.com/iotexproject/iotex-proto/golang/iotexapi"
 	"go.uber.org/zap"
 
@@ -175,14 +176,16 @@ func ActionGeneratorWeb3(
 	transferPayload, executionPayload []byte,
 ) (*types.Transaction, *AddressKey, error) {
 	var (
-		err       error
-		delegates = accountManager.AccountList
-		randNum   = rand.Intn(len(delegates))
-		sender    = delegates[randNum]
-		recipient = delegates[(randNum+1)%len(delegates)]
-		nonce     = accountManager.GetAndInc(sender.EncodedAddr)
-		to        = common.BytesToAddress(recipient.PriKey.PublicKey().Address().Bytes())
-		tx        *types.Transaction
+		err        error
+		delegates  = accountManager.AccountList
+		randNum    = rand.Intn(len(delegates))
+		sender     = delegates[randNum]
+		recipient  = delegates[(randNum+1)%len(delegates)]
+		nonce      = accountManager.GetAndInc(sender.EncodedAddr)
+		to         = common.BytesToAddress(recipient.PriKey.PublicKey().Address().Bytes())
+		ioAddr, _  = address.FromString(contractAddr)
+		toContract = common.BytesToAddress(ioAddr.Bytes())
+		tx         *types.Transaction
 	)
 	switch actionType {
 	default:
@@ -204,7 +207,7 @@ func ActionGeneratorWeb3(
 				GasTipCap: big.NewInt(int64(unit.Qev / 2)),
 				GasFeeCap: big.NewInt(int64(unit.Qev * 2)),
 				Gas:       executionGasLimit,
-				To:        &to,
+				To:        &toContract,
 				Value:     big.NewInt(0),
 				Data:      executionPayload,
 			})
