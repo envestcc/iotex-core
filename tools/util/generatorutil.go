@@ -203,10 +203,10 @@ func ActionGeneratorWeb3(
 				Nonce:     nonce,
 				GasTipCap: big.NewInt(int64(unit.Qev / 2)),
 				GasFeeCap: big.NewInt(int64(unit.Qev * 2)),
-				Gas:       transferGasLimit,
+				Gas:       executionGasLimit,
 				To:        &to,
 				Value:     big.NewInt(0),
-				Data:      transferPayload,
+				Data:      executionPayload,
 			})
 			tx, err = types.SignTx(tx, types.NewCancunSigner(big.NewInt(int64(evmChainID))), sender.PriKey.EcdsaPrivateKey().(*ecdsa.PrivateKey))
 		case action.BlobTxType:
