@@ -553,7 +553,7 @@ func (p *Protocol) ActiveCandidates(ctx context.Context, sr protocol.StateReader
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("ID: %s, native: %s, contract: %s\n", list[i].Operator, csVotes.String())
+		fmt.Printf("ID: %s, native: %s, contract: %s\n", list[i].Operator, list[i].Votes, csVotes.String())
 		list[i].Votes.Add(list[i].Votes, csVotes)
 		active, err := p.isActiveCandidate(ctx, c, list[i])
 		if err != nil {
@@ -774,6 +774,16 @@ func (p *Protocol) contractStakingVotes(ctx context.Context, candidate address.A
 				votes.Add(votes, b.StakedAmount)
 			}
 		}
+		//debug
+		fmt.Printf("staking contract address: %s\n", indexer.ContractAddress())
+		tbc, _ := indexer.TotalBucketCount(height)
+		fmt.Printf("total bucket count: %d at height %d\n", tbc, height)
+		tbkts, _ := indexer.Buckets(height)
+		fmt.Printf("total bucket count: %d\n", len(tbkts))
+		for _, b := range tbkts {
+			fmt.Printf("bucket: %s, %s\n", b.Index, b.Candidate)
+		}
+
 	}
 	return votes, nil
 }
