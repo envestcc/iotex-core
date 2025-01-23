@@ -86,6 +86,9 @@ func (bic *BlockIndexerChecker) CheckIndexer(ctx context.Context, indexer BlockI
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "terminate the indexer checking")
 		}
+		if i == 24838561 {
+			panic("stop at 24838561")
+		}
 		blk, err := bic.dao.GetBlockByHeight(i)
 		if err != nil {
 			return err
