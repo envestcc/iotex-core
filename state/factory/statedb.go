@@ -313,7 +313,9 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 			sdb.currentChainHeight, h,
 		)
 	}
-
+	if blk.Height() >= 24838561 {
+		panic("stop at 24838561")
+	}
 	if err := ws.Commit(ctx); err != nil {
 		return err
 	}
