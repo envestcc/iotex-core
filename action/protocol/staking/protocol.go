@@ -775,7 +775,8 @@ func (p *Protocol) contractStakingVotes(ctx context.Context, candidate address.A
 			}
 		}
 		//debug
-		fmt.Printf("staking contract address: %s\n", indexer.ContractAddress())
+		hh, _ := indexer.Height()
+		fmt.Printf("staking contract address: %s, height: %d\n", indexer.ContractAddress(), hh)
 		tbc, _ := indexer.TotalBucketCount(height)
 		fmt.Printf("total bucket count: %d at height %d\n", tbc, height)
 		tbkts, _ := indexer.Buckets(height)
