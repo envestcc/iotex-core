@@ -142,7 +142,6 @@ func (dao *blockDAO) Start(ctx context.Context) error {
 }
 
 func (dao *blockDAO) checkIndexers(ctx context.Context) error {
-	return nil
 	checker := NewBlockIndexerChecker(dao)
 	for i, indexer := range dao.indexers {
 		if err := checker.CheckIndexer(ctx, indexer, 0, func(height uint64) {
