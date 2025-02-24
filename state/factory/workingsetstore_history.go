@@ -197,7 +197,7 @@ func (store *erigonStore) finalize(ctx context.Context, height uint64, ts uint64
 }
 
 func (store *erigonStore) commit(ctx context.Context) error {
-	defer store.tx.Rollback()
+	// defer store.tx.Rollback()
 	err := store.tx.Commit()
 	if err != nil {
 		return err
