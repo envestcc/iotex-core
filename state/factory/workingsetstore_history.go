@@ -197,6 +197,13 @@ func (store *erigonStore) finalize(ctx context.Context, height uint64, ts uint64
 }
 
 func (store *erigonStore) commit(ctx context.Context) error {
+	// debug
+	var v uint256.Int
+	hash := libcommon.HexToHash("0xa7b2a3ef29675ab6f573dc12a6e61e79fa785f06dda319beb812600781bf5c57")
+	store.intraBlockState.GetState(
+		libcommon.HexToAddress("0x6fbcdc1169b5130c59e72e51ed68a84841c98cd1"),
+		&hash, &v)
+	log.L().Debug("erigon store commit", zap.String("hash", hash.String()), zap.String("value", v.String()))
 	// defer store.tx.Rollback()
 	err := store.tx.Commit()
 	if err != nil {
