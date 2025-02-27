@@ -948,7 +948,7 @@ func createChain(cfg config.Config, inMem bool) (blockchain.Blockchain, factory.
 				return time.Time{}, err
 			}
 			return blk.Timestamp(), nil
-		})
+		}, map[uint64]time.Duration{0: cfg.Genesis.BlockInterval})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

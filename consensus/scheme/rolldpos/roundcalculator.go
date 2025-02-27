@@ -17,12 +17,14 @@ import (
 var errInvalidCurrentTime = errors.New("invalid current time")
 
 type roundCalculator struct {
-	chain                ChainManager
-	timeBasedRotation    bool
-	rp                   *rolldpos.Protocol
-	delegatesByEpochFunc NodesSelectionByEpochFunc
-	proposersByEpochFunc NodesSelectionByEpochFunc
-	beringHeight         uint64
+	chain                     ChainManager
+	timeBasedRotation         bool
+	rp                        *rolldpos.Protocol
+	delegatesByEpochFunc      NodesSelectionByEpochFunc
+	proposersByEpochFunc      NodesSelectionByEpochFunc
+	beringHeight              uint64
+	proposalCountByHeightFunc func(uint64) uint64
+	expectBlockHeight         func(base uint64, ts time.Time) (uint64, error)
 }
 
 // UpdateRound updates previous roundCtx
@@ -56,7 +58,7 @@ func (c *roundCalculator) UpdateRound(round *roundCtx, height uint64, blockInter
 	if err != nil {
 		return nil, err
 	}
-	proposer, err := c.calculateProposer(height, roundNum, proposers)
+	proposer, err := c.calculateProposer(height, roundNum, roundStartTime, proposers)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +237,7 @@ func (c *roundCalculator) newRound(
 		if roundNum, roundStartTime, err = c.roundInfo(height, blockInterval, now, toleratedOvertime); err != nil {
 			return
 		}
-		if proposer, err = c.calculateProposer(height, roundNum, proposers); err != nil {
+		if proposer, err = c.calculateProposer(height, roundNum, roundStartTime, proposers); err != nil {
 			return
 		}
 	}
@@ -264,10 +266,11 @@ func (c *roundCalculator) newRound(
 	return round, nil
 }
 
-// calculateProposer calulates proposer according to height and round number
+// calculateProposer calulates proposer according to height and round time
 func (c *roundCalculator) calculateProposer(
 	height uint64,
 	round uint32,
+	roundTime time.Time,
 	proposers []string,
 ) (proposer string, err error) {
 	// TODO use number of proposers
@@ -278,7 +281,31 @@ func (c *roundCalculator) calculateProposer(
 	}
 	idx := height
 	if c.timeBasedRotation {
-		idx += uint64(round)
+		n := c.proposalCountByHeightFunc(height)
+		if n == 1 {
+			idx += uint64(round)
+		} else {
+			var (
+				expectHeight uint64
+				miss         uint64 // how many blocks are missing in this epoch
+			)
+			base := c.rp.GetEpochHeight(c.rp.GetEpochNum(height))
+			if base == height {
+				miss = uint64(round)
+			} else {
+				expectHeight, err = c.expectBlockHeight(base, roundTime)
+				if err != nil {
+					return
+				}
+				if height < expectHeight {
+					// should not happen, just for safety
+					err = errors.Errorf("height %d is less than expect height %d", height, expectHeight)
+					return
+				}
+				miss = height - expectHeight
+			}
+			idx = idx/n + miss
+		}
 	}
 	proposer = proposers[idx%numProposers]
 	return

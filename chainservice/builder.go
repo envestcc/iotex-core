@@ -785,13 +785,17 @@ func (builder *Builder) registerRollDPoSProtocol() error {
 func (builder *Builder) buildBlockTimeCalculator() (err error) {
 	consensusCfg := consensusfsm.NewConsensusConfig(builder.cfg.Consensus.RollDPoS.FSM, builder.cfg.DardanellesUpgrade, builder.cfg.Genesis, builder.cfg.Consensus.RollDPoS.Delay)
 	dao := builder.cs.BlockDAO()
+	intervalChanges := map[uint64]time.Duration{
+		0: builder.cfg.Genesis.BlockInterval,
+		builder.cfg.Genesis.DardanellesBlockHeight: builder.cfg.DardanellesUpgrade.BlockInterval,
+	}
 	builder.cs.blockTimeCalculator, err = blockutil.NewBlockTimeCalculator(consensusCfg.BlockInterval, builder.cs.Blockchain().TipHeight, func(height uint64) (time.Time, error) {
 		blk, err := dao.GetBlockByHeight(height)
 		if err != nil {
 			return time.Time{}, err
 		}
 		return blk.Timestamp(), nil
-	})
+	}, intervalChanges)
 	return err
 }
 
@@ -801,6 +805,7 @@ func (builder *Builder) buildConsensusComponent() error {
 		consensus.WithBroadcast(func(msg proto.Message) error {
 			return p2pAgent.BroadcastOutbound(context.Background(), msg)
 		}),
+		consensus.WithBlockTimeCalculator(builder.cs.blockTimeCalculator),
 	}
 	if rDPoSProtocol := rolldpos.FindProtocol(builder.cs.registry); rDPoSProtocol != nil {
 		copts = append(copts, consensus.WithRollDPoSProtocol(rDPoSProtocol))

@@ -43,6 +43,7 @@ type (
 		ToleratedOvertime time.Duration                `yaml:"toleratedOvertime"`
 		Delay             time.Duration                `yaml:"delay"`
 		ConsensusDBPath   string                       `yaml:"consensusDBPath"`
+		ProposalCount     uint64                       `yaml:"proposalCount"`
 	}
 
 	// ChainManager defines the blockchain interface
@@ -83,6 +84,7 @@ var DefaultConfig = Config{
 	ToleratedOvertime: 2 * time.Second,
 	Delay:             5 * time.Second,
 	ConsensusDBPath:   "/var/data/consensus.db",
+	ProposalCount:     5,
 }
 
 // NewChainManager creates a chain manager
@@ -338,9 +340,11 @@ type (
 		broadcastHandler  scheme.Broadcast
 		clock             clock.Clock
 		// TODO: explorer dependency deleted at #1085, need to add api params
-		rp                   *rolldpos.Protocol
-		delegatesByEpochFunc NodesSelectionByEpochFunc
-		proposersByEpochFunc NodesSelectionByEpochFunc
+		rp                        *rolldpos.Protocol
+		delegatesByEpochFunc      NodesSelectionByEpochFunc
+		proposersByEpochFunc      NodesSelectionByEpochFunc
+		proposalCountByHeightFunc ProposalCountByHeightFunc
+		expectBlockHeightFunc     ExpectBlockHeightFunc
 	}
 )
 
@@ -407,6 +411,20 @@ func (b *Builder) SetProposersByEpochFunc(
 	return b
 }
 
+func (b *Builder) SetProposalCountByHeightFunc(
+	proposalCountByHeightFunc ProposalCountByHeightFunc,
+) *Builder {
+	b.proposalCountByHeightFunc = proposalCountByHeightFunc
+	return b
+}
+
+func (b *Builder) SetExpectBlockHeightFunc(
+	expectBlockHeightFunc ExpectBlockHeightFunc,
+) *Builder {
+	b.expectBlockHeightFunc = expectBlockHeightFunc
+	return b
+}
+
 // RegisterProtocol sets the rolldpos protocol
 func (b *Builder) RegisterProtocol(rp *rolldpos.Protocol) *Builder {
 	b.rp = rp
@@ -437,6 +455,8 @@ func (b *Builder) Build() (*RollDPoS, error) {
 		b.broadcastHandler,
 		b.delegatesByEpochFunc,
 		b.proposersByEpochFunc,
+		b.proposalCountByHeightFunc,
+		b.expectBlockHeightFunc,
 		b.encodedAddr,
 		b.priKey,
 		b.clock,

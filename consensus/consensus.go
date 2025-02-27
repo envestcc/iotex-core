@@ -23,6 +23,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/consensus/scheme/rolldpos"
 	"github.com/iotexproject/iotex-core/v2/pkg/lifecycle"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
+	"github.com/iotexproject/iotex-core/v2/pkg/util/blockutil"
 	"github.com/iotexproject/iotex-core/v2/state"
 	"github.com/iotexproject/iotex-core/v2/state/factory"
 )
@@ -49,6 +50,7 @@ type optionParams struct {
 	broadcastHandler scheme.Broadcast
 	pp               poll.Protocol
 	rp               *rp.Protocol
+	blockCalc        *blockutil.BlockTimeCalculator
 }
 
 // Option sets Consensus construction parameter.
@@ -74,6 +76,13 @@ func WithRollDPoSProtocol(rp *rp.Protocol) Option {
 func WithPollProtocol(pp poll.Protocol) Option {
 	return func(ops *optionParams) error {
 		ops.pp = pp
+		return nil
+	}
+}
+
+func WithBlockTimeCalculator(btc *blockutil.BlockTimeCalculator) Option {
+	return func(ops *optionParams) error {
+		ops.blockCalc = btc
 		return nil
 	}
 }
@@ -132,6 +141,12 @@ func NewConsensus(
 			return addrs, nil
 		}
 		proposersByEpochFunc := delegatesByEpochFunc
+		proposalCountByHeightFunc := func(h uint64) uint64 {
+			if h < cfg.Genesis.WakeBlockHeight {
+				return 1
+			}
+			return cfg.Consensus.ProposalCount
+		}
 		bd := rolldpos.NewRollDPoSBuilder().
 			SetAddr(cfg.Chain.ProducerAddress().String()).
 			SetPriKey(cfg.Chain.ProducerPrivateKey()).
@@ -142,6 +157,8 @@ func NewConsensus(
 			SetBroadcast(ops.broadcastHandler).
 			SetDelegatesByEpochFunc(delegatesByEpochFunc).
 			SetProposersByEpochFunc(proposersByEpochFunc).
+			SetProposalCountByHeightFunc(proposalCountByHeightFunc).
+			SetExpectBlockHeightFunc(ops.blockCalc.ExpectBlockHeight).
 			RegisterProtocol(ops.rp)
 		// TODO: explorer dependency deleted here at #1085, need to revive by migrating to api
 		cs.scheme, err = bd.Build()

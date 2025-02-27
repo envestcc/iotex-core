@@ -62,18 +62,18 @@ func TestUpdateRound(t *testing.T) {
 func TestNewRound(t *testing.T) {
 	require := require.New(t)
 	rc := makeRoundCalculator(t)
-	_, err := rc.calculateProposer(5, 1, []string{"1", "2", "3", "4", "5"})
+	_, err := rc.calculateProposer(5, 1, time.Time{}, []string{"1", "2", "3", "4", "5"})
 	require.Error(err)
 	var validDelegates [24]string
 	for i := 0; i < 24; i++ {
 		validDelegates[i] = identityset.Address(i).String()
 	}
-	proposer, err := rc.calculateProposer(5, 1, validDelegates[:])
+	proposer, err := rc.calculateProposer(5, 1, time.Time{}, validDelegates[:])
 	require.NoError(err)
 	require.Equal(validDelegates[6], proposer)
 
 	rc.timeBasedRotation = false
-	proposer, err = rc.calculateProposer(50, 1, validDelegates[:])
+	proposer, err = rc.calculateProposer(50, 1, time.Time{}, validDelegates[:])
 	require.NoError(err)
 	require.Equal(validDelegates[2], proposer)
 
@@ -271,5 +271,7 @@ func makeRoundCalculator(t *testing.T) *roundCalculator {
 		delegatesByEpoch,
 		delegatesByEpoch,
 		0,
+		func(u uint64) uint64 { return 1 },
+		func(base uint64, ts time.Time) (uint64, error) { return 0, nil },
 	}
 }

@@ -71,6 +71,10 @@ func init() {
 type (
 	// NodesSelectionByEpochFunc defines a function to select nodes
 	NodesSelectionByEpochFunc func(uint64) ([]string, error)
+	// ProposalCountByHeightFunc defines a function to get proposal count
+	ProposalCountByHeightFunc func(uint64) uint64
+	// ExpectBlockHeightFunc defines a function to get expected block height based on the timestamp
+	ExpectBlockHeightFunc func(base uint64, ts time.Time) (uint64, error)
 
 	// RDPoSCtx is the context of RollDPoS
 	RDPoSCtx interface {
@@ -116,6 +120,8 @@ func NewRollDPoSCtx(
 	broadcastHandler scheme.Broadcast,
 	delegatesByEpochFunc NodesSelectionByEpochFunc,
 	proposersByEpochFunc NodesSelectionByEpochFunc,
+	proposalCountByHeightFunc ProposalCountByHeightFunc,
+	expectBlockHeightFunc ExpectBlockHeightFunc,
 	encodedAddr string,
 	priKey crypto.PrivateKey,
 	clock clock.Clock,
@@ -151,12 +157,14 @@ func NewRollDPoSCtx(
 		eManagerDB = db.NewBoltDB(consensusDBConfig)
 	}
 	roundCalc := &roundCalculator{
-		delegatesByEpochFunc: delegatesByEpochFunc,
-		proposersByEpochFunc: proposersByEpochFunc,
-		chain:                chain,
-		rp:                   rp,
-		timeBasedRotation:    timeBasedRotation,
-		beringHeight:         beringHeight,
+		delegatesByEpochFunc:      delegatesByEpochFunc,
+		proposersByEpochFunc:      proposersByEpochFunc,
+		chain:                     chain,
+		rp:                        rp,
+		timeBasedRotation:         timeBasedRotation,
+		beringHeight:              beringHeight,
+		proposalCountByHeightFunc: proposalCountByHeightFunc,
+		expectBlockHeight:         expectBlockHeightFunc,
 	}
 	return &rollDPoSCtx{
 		ConsensusConfig:   cfg,
