@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
+	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/action/protocol/rolldpos"
 	"github.com/iotexproject/iotex-core/v2/blockchain"
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
@@ -70,7 +71,7 @@ func init() {
 
 type (
 	// NodesSelectionByEpochFunc defines a function to select nodes
-	NodesSelectionByEpochFunc func(uint64) ([]string, error)
+	NodesSelectionByEpochFunc func(uint64, protocol.StateReader) ([]string, error)
 
 	// RDPoSCtx is the context of RollDPoS
 	RDPoSCtx interface {
@@ -370,6 +371,38 @@ func (ctx *rollDPoSCtx) Proposal() (interface{}, error) {
 	return ctx.mintNewBlock()
 }
 
+func (ctx *rollDPoSCtx) PrepareNextProposal(msg any) error {
+	// retrieve the block from the message
+	ecm, ok := msg.(*EndorsedConsensusMessage)
+	if !ok {
+		return errors.New("invalid endorsed block")
+	}
+	proposal, ok := ecm.Document().(*blockProposal)
+	if !ok {
+		return errors.New("invalid endorsed block")
+	}
+	var (
+		blk       = proposal.block
+		height    = blk.Height() + 1
+		interval  = ctx.BlockInterval(height)
+		startTime = blk.Timestamp().Add(interval)
+		prevHash  = blk.HashBlock()
+		err       error
+		sr        protocol.StateReader
+	)
+	sr, err = ctx.chain.StateReaderAt(&blk.Header)
+	if err != nil {
+		return errors.Errorf("failed to get state reader at block %d, hash %x", blk.Height(), prevHash[:])
+	}
+	// check if the current node is the next proposer
+	nextProposer := ctx.roundCalc.ProposerAt(height, interval, startTime, sr)
+	if ctx.encodedAddr != nextProposer {
+		return nil
+	}
+	ctx.logger().Debug("prepare next proposal", log.Hex("prevHash", prevHash[:]), zap.Uint64("height", ctx.round.height+1), zap.Time("timestamp", startTime), zap.String("ioAddr", ctx.encodedAddr), zap.String("nextproposer", nextProposer))
+	return ctx.chain.PrepareBlock(prevHash[:], startTime)
+}
+
 func (ctx *rollDPoSCtx) WaitUntilRoundStart() time.Duration {
 	ctx.mutex.RLock()
 	defer ctx.mutex.RUnlock()
@@ -423,6 +456,7 @@ func (ctx *rollDPoSCtx) NewProposalEndorsement(msg interface{}) (interface{}, er
 	} else if ctx.round.IsLocked() {
 		blockHash = ctx.round.HashOfBlockInLock()
 	}
+	// TODO: prepare next block if the current node will be a proposer
 
 	return ctx.newEndorsement(
 		blockHash,
@@ -627,7 +661,7 @@ func (ctx *rollDPoSCtx) mintNewBlock() (*EndorsedConsensusMessage, error) {
 	blk := ctx.round.CachedMintedBlock()
 	if blk == nil {
 		// in case that there is no cached block in eManagerDB, it mints a new block.
-		blk, err = ctx.chain.MintNewBlock(ctx.round.StartTime())
+		blk, err = ctx.chain.MintNewBlock(ctx.round.Height(), ctx.round.StartTime())
 		if err != nil {
 			return nil, err
 		}
@@ -660,7 +694,7 @@ func (ctx *rollDPoSCtx) endorseBlockProposal(proposal *blockProposal) (*Endorsed
 }
 
 func (ctx *rollDPoSCtx) logger() *zap.Logger {
-	return ctx.round.Log(log.Logger("consensus"))
+	return ctx.round.Log(log.Logger("consensus")).With(zap.String("ioAddr", ctx.encodedAddr))
 }
 
 func (ctx *rollDPoSCtx) newConsensusEvent(

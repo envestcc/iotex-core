@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/action/protocol/rolldpos"
 	"github.com/iotexproject/iotex-core/v2/blockchain"
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
@@ -53,7 +54,9 @@ type (
 		BlockCommitTime(uint64) (time.Time, error)
 		// MintNewBlock creates a new block with given actions
 		// Note: the coinbase transfer will be added to the given transfers when minting a new block
-		MintNewBlock(timestamp time.Time) (*block.Block, error)
+		MintNewBlock(height uint64, timestamp time.Time) (*block.Block, error)
+		// PrepareBlock prepares a new block with given parent hash
+		PrepareBlock(prevHash []byte, timestamp time.Time) error
 		// CommitBlock validates and appends a block to the chain
 		CommitBlock(blk *block.Block) error
 		// ValidateBlock validates a new block before adding it to the blockchain
@@ -62,10 +65,17 @@ type (
 		TipHeight() uint64
 		// ChainAddress returns chain address on parent chain, the root chain return empty.
 		ChainAddress() string
+		// StateReaderAt returns state reader at given header
+		StateReaderAt(header *block.Header) (protocol.StateReader, error)
+		// StateReader returns latest confirmed state reader
+		StateReader() protocol.StateReader
 	}
 
-	chainManager struct {
-		bc blockchain.Blockchain
+	StateReaderAtFn func(header *block.Header) (protocol.StateReader, error)
+	chainManager    struct {
+		bc   blockchain.Blockchain
+		sr   protocol.StateReader
+		srFn StateReaderAtFn
 	}
 )
 
@@ -86,9 +96,11 @@ var DefaultConfig = Config{
 }
 
 // NewChainManager creates a chain manager
-func NewChainManager(bc blockchain.Blockchain) ChainManager {
+func NewChainManager(bc blockchain.Blockchain, sr protocol.StateReader, srFn StateReaderAtFn) ChainManager {
 	return &chainManager{
-		bc: bc,
+		bc:   bc,
+		sr:   sr,
+		srFn: srFn,
 	}
 }
 
@@ -120,8 +132,16 @@ func (cm *chainManager) BlockCommitTime(height uint64) (time.Time, error) {
 }
 
 // MintNewBlock creates a new block with given actions
-func (cm *chainManager) MintNewBlock(timestamp time.Time) (*block.Block, error) {
+func (cm *chainManager) MintNewBlock(height uint64, timestamp time.Time) (*block.Block, error) {
+	if cm.bc.TipHeight() != height-1 {
+		// TODO: mint new block for given height
+	}
 	return cm.bc.MintNewBlock(timestamp)
+}
+
+// PrepareBlock prepares a new block with given parent hash
+func (cm *chainManager) PrepareBlock(prevHash []byte, timestamp time.Time) error {
+	return cm.bc.PrepareBlock(prevHash, timestamp)
 }
 
 // CommitBlock validates and appends a block to the chain
@@ -142,6 +162,16 @@ func (cm *chainManager) TipHeight() uint64 {
 // ChainAddress returns chain address on parent chain, the root chain return empty.
 func (cm *chainManager) ChainAddress() string {
 	return cm.bc.ChainAddress()
+}
+
+// StateReaderAt returns state reader at given header
+func (cm *chainManager) StateReaderAt(header *block.Header) (protocol.StateReader, error) {
+	return cm.srFn(header)
+}
+
+// StateReader returns state reader
+func (cm *chainManager) StateReader() protocol.StateReader {
+	return cm.sr
 }
 
 // RollDPoS is Roll-DPoS consensus main entrance

@@ -27,7 +27,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/test/identityset"
 )
 
-var dummyCandidatesByHeightFunc = func(uint64) ([]string, error) { return nil, nil }
+var dummyCandidatesByHeightFunc = func(uint64, protocol.StateReader) ([]string, error) { return nil, nil }
 
 func TestRollDPoSCtx(t *testing.T) {
 	require := require.New(t)
@@ -35,25 +35,27 @@ func TestRollDPoSCtx(t *testing.T) {
 	g := genesis.TestDefault()
 	dbConfig := db.DefaultConfig
 	dbConfig.DbPath = DefaultConfig.ConsensusDBPath
-	b, _, _, _, _ := makeChain(t)
-
+	b, sf, _, _, _ := makeChain(t)
+	stateReaderAtFn := func(*block.Header) (protocol.StateReader, error) {
+		return sf, nil
+	}
 	t.Run("case 1:panic because of chain is nil", func(t *testing.T) {
 		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, nil, block.NewDeserializer(0), nil, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, nil, 0)
 		require.Error(err)
 	})
 
 	t.Run("case 2:panic because of rp is nil", func(t *testing.T) {
-		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b), block.NewDeserializer(0), nil, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, nil, 0)
+		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b, sf, stateReaderAtFn), block.NewDeserializer(0), nil, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, nil, 0)
 		require.Error(err)
 	})
 
 	rp := rolldpos.NewProtocol(
-		g.NumCandidateDelegates,
-		g.NumDelegates,
-		g.NumSubEpochs,
+		genesis.Default.NumCandidateDelegates,
+		genesis.Default.NumDelegates,
+		genesis.Default.NumSubEpochs,
 	)
 	t.Run("case 3:panic because of clock is nil", func(t *testing.T) {
-		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b), block.NewDeserializer(0), rp, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, nil, 0)
+		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b, sf, stateReaderAtFn), block.NewDeserializer(0), rp, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, nil, 0)
 		require.Error(err)
 	})
 
@@ -63,19 +65,19 @@ func TestRollDPoSCtx(t *testing.T) {
 	cfg.FSM.AcceptLockEndorsementTTL = time.Second
 	cfg.FSM.CommitTTL = time.Second
 	t.Run("case 4:panic because of fsm time bigger than block interval", func(t *testing.T) {
-		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b), block.NewDeserializer(0), rp, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, c, 0)
+		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b, sf, stateReaderAtFn), block.NewDeserializer(0), rp, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, c, 0)
 		require.Error(err)
 	})
 
 	g.Blockchain.BlockInterval = time.Second * 20
 	t.Run("case 5:panic because of nil CandidatesByHeight function", func(t *testing.T) {
-		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b), block.NewDeserializer(0), rp, nil, nil, nil, "", nil, c, 0)
+		_, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b, sf, stateReaderAtFn), block.NewDeserializer(0), rp, nil, nil, nil, "", nil, c, 0)
 		require.Error(err)
 	})
 
 	t.Run("case 6:normal", func(t *testing.T) {
-		bh := g.BeringBlockHeight
-		rctx, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b), block.NewDeserializer(0), rp, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, c, bh)
+		bh := genesis.Default.BeringBlockHeight
+		rctx, err := NewRollDPoSCtx(consensusfsm.NewConsensusConfig(cfg.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, cfg.Delay), dbConfig, true, time.Second, true, NewChainManager(b, sf, stateReaderAtFn), block.NewDeserializer(0), rp, nil, dummyCandidatesByHeightFunc, dummyCandidatesByHeightFunc, "", nil, c, bh)
 		require.NoError(err)
 		require.Equal(bh, rctx.RoundCalculator().beringHeight)
 		require.NotNil(rctx)
@@ -88,7 +90,7 @@ func TestCheckVoteEndorser(t *testing.T) {
 	c := clock.New()
 	g := genesis.TestDefault()
 	g.Blockchain.BlockInterval = time.Second * 20
-	delegatesByEpochFunc := func(epochnum uint64) ([]string, error) {
+	delegatesByEpochFunc := func(epochnum uint64, _ protocol.StateReader) ([]string, error) {
 		re := protocol.NewRegistry()
 		if err := rp.Register(re); err != nil {
 			return nil, err
@@ -123,13 +125,16 @@ func TestCheckVoteEndorser(t *testing.T) {
 		}
 		return addrs, nil
 	}
+	stateReaderAtFn := func(*block.Header) (protocol.StateReader, error) {
+		return sf, nil
+	}
 	rctx, err := NewRollDPoSCtx(
 		consensusfsm.NewConsensusConfig(DefaultConfig.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, DefaultConfig.Delay),
 		db.DefaultConfig,
 		true,
 		time.Second,
 		true,
-		NewChainManager(b),
+		NewChainManager(b, sf, stateReaderAtFn),
 		block.NewDeserializer(0),
 		rp,
 		nil,
@@ -138,7 +143,7 @@ func TestCheckVoteEndorser(t *testing.T) {
 		"",
 		nil,
 		c,
-		g.BeringBlockHeight,
+		genesis.Default.BeringBlockHeight,
 	)
 	require.NoError(err)
 	require.NotNil(rctx)
@@ -161,7 +166,7 @@ func TestCheckBlockProposer(t *testing.T) {
 	b, sf, _, rp, pp := makeChain(t)
 	c := clock.New()
 	g.Blockchain.BlockInterval = time.Second * 20
-	delegatesByEpochFunc := func(epochnum uint64) ([]string, error) {
+	delegatesByEpochFunc := func(epochnum uint64, _ protocol.StateReader) ([]string, error) {
 		re := protocol.NewRegistry()
 		if err := rp.Register(re); err != nil {
 			return nil, err
@@ -196,13 +201,16 @@ func TestCheckBlockProposer(t *testing.T) {
 		}
 		return addrs, nil
 	}
+	stateReaderAtFn := func(*block.Header) (protocol.StateReader, error) {
+		return sf, nil
+	}
 	rctx, err := NewRollDPoSCtx(
 		consensusfsm.NewConsensusConfig(DefaultConfig.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, DefaultConfig.Delay),
 		db.DefaultConfig,
 		true,
 		time.Second,
 		true,
-		NewChainManager(b),
+		NewChainManager(b, sf, stateReaderAtFn),
 		block.NewDeserializer(0),
 		rp,
 		nil,
@@ -211,7 +219,7 @@ func TestCheckBlockProposer(t *testing.T) {
 		"",
 		nil,
 		c,
-		g.BeringBlockHeight,
+		genesis.Default.BeringBlockHeight,
 	)
 	require.NoError(err)
 	require.NotNil(rctx)
@@ -273,7 +281,7 @@ func TestNotProducingMultipleBlocks(t *testing.T) {
 	c := clock.New()
 	g := genesis.TestDefault()
 	g.Blockchain.BlockInterval = time.Second * 20
-	delegatesByEpoch := func(epochnum uint64) ([]string, error) {
+	delegatesByEpoch := func(epochnum uint64, _ protocol.StateReader) ([]string, error) {
 		re := protocol.NewRegistry()
 		if err := rp.Register(re); err != nil {
 			return nil, err
@@ -308,13 +316,16 @@ func TestNotProducingMultipleBlocks(t *testing.T) {
 		}
 		return addrs, nil
 	}
+	stateReaderAtFn := func(*block.Header) (protocol.StateReader, error) {
+		return sf, nil
+	}
 	rctx, err := NewRollDPoSCtx(
 		consensusfsm.NewConsensusConfig(DefaultConfig.FSM, consensusfsm.DefaultDardanellesUpgradeConfig, g, DefaultConfig.Delay),
 		db.DefaultConfig,
 		true,
 		time.Second,
 		true,
-		NewChainManager(b),
+		NewChainManager(b, sf, stateReaderAtFn),
 		block.NewDeserializer(0),
 		rp,
 		nil,
@@ -323,7 +334,7 @@ func TestNotProducingMultipleBlocks(t *testing.T) {
 		"",
 		identityset.PrivateKey(10),
 		c,
-		g.BeringBlockHeight,
+		genesis.Default.BeringBlockHeight,
 	)
 	require.NoError(err)
 	require.NotNil(rctx)

@@ -44,6 +44,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/state/factory"
 	"github.com/iotexproject/iotex-core/v2/test/identityset"
 	"github.com/iotexproject/iotex-core/v2/test/mock/mock_blockchain"
+	"github.com/iotexproject/iotex-core/v2/test/mock/mock_factory"
 	"github.com/iotexproject/iotex-core/v2/testutil"
 )
 
@@ -71,14 +72,16 @@ func TestNewRollDPoS(t *testing.T) {
 		g.NumDelegates,
 		g.NumSubEpochs,
 	)
-	delegatesByEpoch := func(uint64) ([]string, error) { return nil, nil }
+	delegatesByEpoch := func(uint64, protocol.StateReader) ([]string, error) { return nil, nil }
+	sf := mock_factory.NewMockFactory(ctrl)
+	stateReaderAtFn := func(*block.Header) (protocol.StateReader, error) { return sf, nil }
 	t.Run("normal", func(t *testing.T) {
 		sk := identityset.PrivateKey(0)
 		r, err := NewRollDPoSBuilder().
 			SetConfig(builderCfg).
 			SetAddr(identityset.Address(0).String()).
 			SetPriKey(sk).
-			SetChainManager(NewChainManager(mock_blockchain.NewMockBlockchain(ctrl))).
+			SetChainManager(NewChainManager(mock_blockchain.NewMockBlockchain(ctrl), sf, stateReaderAtFn)).
 			SetBroadcast(func(_ proto.Message) error {
 				return nil
 			}).
@@ -95,7 +98,7 @@ func TestNewRollDPoS(t *testing.T) {
 			SetConfig(builderCfg).
 			SetAddr(identityset.Address(0).String()).
 			SetPriKey(sk).
-			SetChainManager(NewChainManager(mock_blockchain.NewMockBlockchain(ctrl))).
+			SetChainManager(NewChainManager(mock_blockchain.NewMockBlockchain(ctrl), sf, stateReaderAtFn)).
 			SetBroadcast(func(_ proto.Message) error {
 				return nil
 			}).
@@ -116,7 +119,7 @@ func TestNewRollDPoS(t *testing.T) {
 			SetConfig(builderCfg).
 			SetAddr(identityset.Address(0).String()).
 			SetPriKey(sk).
-			SetChainManager(NewChainManager(mock_blockchain.NewMockBlockchain(ctrl))).
+			SetChainManager(NewChainManager(mock_blockchain.NewMockBlockchain(ctrl), sf, stateReaderAtFn)).
 			SetBroadcast(func(_ proto.Message) error {
 				return nil
 			}).
@@ -222,7 +225,7 @@ func TestValidateBlockFooter(t *testing.T) {
 		g.NumDelegates,
 		g.NumSubEpochs,
 	)
-	delegatesByEpoch := func(uint64) ([]string, error) {
+	delegatesByEpoch := func(uint64, protocol.StateReader) ([]string, error) {
 		return []string{
 			candidates[0],
 			candidates[1],
@@ -230,11 +233,13 @@ func TestValidateBlockFooter(t *testing.T) {
 			candidates[3],
 		}, nil
 	}
+	sf := mock_factory.NewMockFactory(ctrl)
+	stateReaderAtFn := func(*block.Header) (protocol.StateReader, error) { return sf, nil }
 	r, err := NewRollDPoSBuilder().
 		SetConfig(builderCfg).
 		SetAddr(identityset.Address(1).String()).
 		SetPriKey(sk1).
-		SetChainManager(NewChainManager(bc)).
+		SetChainManager(NewChainManager(bc, sf, stateReaderAtFn)).
 		SetBroadcast(func(_ proto.Message) error {
 			return nil
 		}).
@@ -280,7 +285,6 @@ func TestRollDPoS_Metrics(t *testing.T) {
 	candidates := make([]string, 5)
 	for i := 0; i < len(candidates); i++ {
 		candidates[i] = identityset.Address(i).String()
-		t.Logf("candidate %d: %s", i, candidates[i])
 	}
 
 	clock := clock.NewMock()
@@ -312,7 +316,7 @@ func TestRollDPoS_Metrics(t *testing.T) {
 		g.NumDelegates,
 		g.NumSubEpochs,
 	)
-	delegatesByEpoch := func(uint64) ([]string, error) {
+	delegatesByEpoch := func(uint64, protocol.StateReader) ([]string, error) {
 		return []string{
 			candidates[0],
 			candidates[1],
@@ -320,11 +324,13 @@ func TestRollDPoS_Metrics(t *testing.T) {
 			candidates[3],
 		}, nil
 	}
+	sf := mock_factory.NewMockFactory(ctrl)
+	stateReaderAtFn := func(*block.Header) (protocol.StateReader, error) { return sf, nil }
 	r, err := NewRollDPoSBuilder().
 		SetConfig(builderCfg).
 		SetAddr(identityset.Address(1).String()).
 		SetPriKey(sk1).
-		SetChainManager(NewChainManager(bc)).
+		SetChainManager(NewChainManager(bc, sf, stateReaderAtFn)).
 		SetBroadcast(func(_ proto.Message) error {
 			return nil
 		}).
@@ -431,7 +437,7 @@ func TestRollDPoSConsensus(t *testing.T) {
 			chainAddrs[i] = addressMap[rawAddress]
 		}
 
-		delegatesByEpochFunc := func(_ uint64) ([]string, error) {
+		delegatesByEpochFunc := func(_ uint64, _ protocol.StateReader) ([]string, error) {
 			candidates := make([]string, 0, numNodes)
 			for _, addr := range chainAddrs {
 				candidates = append(candidates, addr.encodedAddr)
@@ -481,12 +487,14 @@ func TestRollDPoSConsensus(t *testing.T) {
 				peers: make(map[net.Addr]*RollDPoS),
 			}
 			p2ps = append(p2ps, p2p)
-
+			stateReaderAtFn := func(header *block.Header) (protocol.StateReader, error) {
+				return sf, nil
+			}
 			consensus, err := NewRollDPoSBuilder().
 				SetAddr(chainAddrs[i].encodedAddr).
 				SetPriKey(chainAddrs[i].priKey).
 				SetConfig(builderCfg).
-				SetChainManager(NewChainManager(chain)).
+				SetChainManager(NewChainManager(chain, sf, stateReaderAtFn)).
 				SetBroadcast(p2p.Broadcast).
 				SetDelegatesByEpochFunc(delegatesByEpochFunc).
 				SetProposersByEpochFunc(delegatesByEpochFunc).
@@ -672,7 +680,7 @@ func TestRollDPoSConsensus(t *testing.T) {
 		}()
 		time.Sleep(5 * time.Second)
 		for _, chain := range chains {
-			header, err := chain.BlockHeaderByHeight(1)
+			header, err := chain.BlockFooterByHeight(1)
 			assert.Nil(t, header)
 			assert.Error(t, err)
 		}
