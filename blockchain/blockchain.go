@@ -97,10 +97,7 @@ type (
 		// For block operations
 		// MintNewBlock creates a new block with given actions, based on the tip block
 		// Note: the coinbase transfer will be added to the given transfers when minting a new block
-		MintNewBlock(timestamp time.Time) (*block.Block, error)
-		// PrepareBlock start to prepares a new block with given previous hash asynchrously
-		// prepared block will be used by MintNewBlock
-		PrepareBlock(prevHash []byte, timestamp time.Time) error
+		MintNewBlock(timestamp time.Time, opts ...MintOpt) (*block.Block, error)
 		// CommitBlock validates and appends a block to the chain
 		CommitBlock(blk *block.Block) error
 		// ValidateBlock validates a new block before adding it to the blockchain
@@ -117,6 +114,12 @@ type (
 	BlockBuilderFactory interface {
 		// NewBlockBuilder creates block builder
 		NewBlockBuilder(context.Context, func(action.Envelope) (*action.SealedEnvelope, error)) (*block.Builder, error)
+		ReceiveBlock(*block.Block) error
+		Init(hash.Hash256)
+		AddProposal(*block.Block) error
+		Forks() []*block.Block
+		Block(hash.Hash256) *block.Block
+		BlockByHeight(uint64) *block.Block
 	}
 
 	// blockchain implements the Blockchain interface
@@ -132,9 +135,7 @@ type (
 		timerFactory   *prometheustimer.TimerFactory
 
 		// used by account-based model
-		bbf           BlockBuilderFactory
-		blockPreparer *blockPreparer
-		proposalPool  *proposalPool
+		bbf BlockBuilderFactory
 	}
 )
 
@@ -186,6 +187,20 @@ func SkipSidecarValidationOption() BlockValidationOption {
 	}
 }
 
+type (
+	MintConfig struct {
+		PrevHash []byte
+	}
+
+	MintOpt func(*MintConfig)
+)
+
+func WithMintPrevHash(prevHash []byte) MintOpt {
+	return func(cfg *MintConfig) {
+		cfg.PrevHash = prevHash
+	}
+}
+
 // NewBlockchain creates a new blockchain and DB instance
 func NewBlockchain(cfg Config, g genesis.Genesis, dao blockdao.BlockDAO, bbf BlockBuilderFactory, opts ...Option) Blockchain {
 	// create the Blockchain
@@ -196,8 +211,6 @@ func NewBlockchain(cfg Config, g genesis.Genesis, dao blockdao.BlockDAO, bbf Blo
 		bbf:           bbf,
 		clk:           clock.New(),
 		pubSubManager: NewPubSub(cfg.StreamingBlockBufferSize),
-		blockPreparer: newBlockPreparer(),
-		proposalPool:  newProposalPool(),
 	}
 	for _, opt := range opts {
 		if err := opt(chain); err != nil {
@@ -219,8 +232,7 @@ func NewBlockchain(cfg Config, g genesis.Genesis, dao blockdao.BlockDAO, bbf Blo
 	}
 	chain.lifecycle.Add(chain.dao)
 	chain.lifecycle.Add(chain.pubSubManager)
-	chain.pubSubManager.AddBlockListener(chain.blockPreparer)
-	chain.pubSubManager.AddBlockListener(chain.proposalPool)
+	chain.pubSubManager.AddBlockListener(chain.bbf)
 	return chain
 }
 
@@ -253,7 +265,7 @@ func (bc *blockchain) Start(ctx context.Context) error {
 	if err := bc.lifecycle.OnStart(ctx); err != nil {
 		return err
 	}
-	bc.proposalPool.Init(bc.TipHash())
+	bc.bbf.Init(bc.TipHash())
 	return nil
 }
 
@@ -270,7 +282,7 @@ func (bc *blockchain) BlockHeaderByHeight(height uint64) (*block.Header, error) 
 	case nil:
 		return header, nil
 	case db.ErrNotExist:
-		if blk := bc.proposalPool.Block(height); blk != nil {
+		if blk := bc.bbf.BlockByHeight(height); blk != nil {
 			return &blk.Header, nil
 		}
 		return nil, err
@@ -318,7 +330,11 @@ func (bc *blockchain) ValidateBlock(blk *block.Block, opts ...BlockValidationOpt
 	if err != nil {
 		return err
 	}
-	tip, err := bc.tipInfo(tipHeight)
+	tipHash, err := bc.dao.GetBlockHash(tipHeight)
+	if err != nil {
+		return err
+	}
+	tip, err := bc.tipInfoByHash(tipHash[:])
 	if err != nil {
 		return err
 	}
@@ -386,7 +402,7 @@ func (bc *blockchain) ValidateBlock(blk *block.Block, opts ...BlockValidationOpt
 	if err != nil {
 		return err
 	}
-	if err = bc.proposalPool.AddBlock(blk); err != nil {
+	if err = bc.bbf.AddProposal(blk); err != nil {
 		log.L().Warn("failed to add block to proposal pool", zap.Error(err), zap.Uint64("height", blk.Height()), zap.Time("timestamp", blk.Timestamp()))
 	}
 	return nil
@@ -426,7 +442,18 @@ func (bc *blockchain) context(ctx context.Context, height uint64) (context.Conte
 	if err != nil {
 		return nil, err
 	}
+	return bc.contextWithTipInfo(ctx, tip), nil
+}
 
+func (bc *blockchain) contextByHash(ctx context.Context, hash []byte) (context.Context, error) {
+	tip, err := bc.tipInfoByHash(hash)
+	if err != nil {
+		return nil, err
+	}
+	return bc.contextWithTipInfo(ctx, tip), nil
+}
+
+func (bc *blockchain) contextWithTipInfo(ctx context.Context, tip *protocol.TipInfo) context.Context {
 	ctx = genesis.WithGenesisContext(
 		protocol.WithBlockchainCtx(
 			ctx,
@@ -438,97 +465,76 @@ func (bc *blockchain) context(ctx context.Context, height uint64) (context.Conte
 		),
 		bc.genesis,
 	)
-	return protocol.WithFeatureWithHeightCtx(ctx), nil
+	return protocol.WithFeatureWithHeightCtx(ctx)
 }
 
 func (bc *blockchain) PendingHeight() uint64 {
-	return max(bc.proposalPool.Tip(), bc.TipHeight())
+	var pending uint64
+	if forks := bc.bbf.Forks(); len(forks) > 0 {
+		pending = forks[0].Height()
+	}
+	return max(pending, bc.TipHeight())
 }
 
 func (bc *blockchain) blockByHash(hash hash.Hash256) (*block.Block, error) {
-	if blk := bc.proposalPool.BlockByHash(hash); blk != nil {
+	if blk := bc.bbf.Block(hash); blk != nil {
 		return blk, nil
 	}
 	return bc.dao.GetBlock(hash)
 }
 
-func (bc *blockchain) PrepareBlock(prevHash []byte, timestamp time.Time) error {
-	prevBlk, err := bc.blockByHash(hash.Hash256(prevHash))
-	if err != nil {
-		return errors.Wrapf(err, "failed to get previous block %x", prevHash)
+func (bc *blockchain) MintNewBlock(timestamp time.Time, opts ...MintOpt) (*block.Block, error) {
+	cfg := MintConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
 	}
-	if prevBlk.Height() < bc.TipHeight() {
-		return errors.Errorf("previous block height %d is less than tip height %d", prevBlk.Height(), bc.TipHeight())
-	}
-	height := prevBlk.Height() + 1
-
-	log.L().Debug("Prepare a new block.", zap.Uint64("height", height), zap.Time("timestamp", timestamp), log.Hex("prevHash", prevHash))
-	ctx, err := bc.context(context.Background(), height-1)
-	if err != nil {
-		return err
-	}
-	tip := protocol.MustGetBlockchainCtx(ctx).Tip
-	ctx = bc.contextWithBlock(ctx, bc.config.ProducerAddress(), height, timestamp, protocol.CalcBaseFee(genesis.MustExtractGenesisContext(ctx).Blockchain, &tip), protocol.CalcExcessBlobGas(tip.ExcessBlobGas, tip.BlobGasUsed))
-	ctx = protocol.WithFeatureCtx(ctx)
-	// run execution and update state trie root hash
-	minterPrivateKey := bc.config.ProducerPrivateKey()
-
-	bc.blockPreparer.PrepareBlock(prevHash, func() (*block.Block, error) {
-		blockBuilder, err := bc.bbf.NewBlockBuilder(
-			ctx,
-			func(elp action.Envelope) (*action.SealedEnvelope, error) {
-				return action.Sign(elp, minterPrivateKey)
-			},
-		)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create block builder at height %d", height)
-		}
-		blk, err := blockBuilder.SignAndBuild(minterPrivateKey)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create block at height %d", height)
-		}
-
-		_blockMtc.WithLabelValues("MintGas").Set(float64(blk.GasUsed()))
-		_blockMtc.WithLabelValues("MintActions").Set(float64(len(blk.Actions)))
-		return &blk, nil
-	})
-
-	return nil
-}
-
-func (bc *blockchain) MintNewBlock(timestamp time.Time) (*block.Block, error) {
 	bc.mu.RLock()
 	defer bc.mu.RUnlock()
 	mintNewBlockTimer := bc.timerFactory.NewTimer("MintNewBlock")
 	defer mintNewBlockTimer.End()
-	tipHeight, err := bc.dao.Height()
-	if err != nil {
-		return nil, err
+	var (
+		newblockHeight uint64
+		tipHeight      uint64
+		prevHash       []byte
+		err            error
+	)
+	if len(cfg.PrevHash) > 0 {
+		prevBlk, err := bc.blockByHash(hash.Hash256(cfg.PrevHash))
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get previous block %x", cfg.PrevHash)
+		}
+		if prevBlk.Height() < bc.TipHeight() {
+			return nil, errors.Errorf("previous block height %d is less than tip height %d", prevBlk.Height(), bc.TipHeight())
+		}
+		tipHeight = prevBlk.Height()
+		newblockHeight = prevBlk.Height() + 1
+		prevHash = cfg.PrevHash
+	} else {
+		tipHeight, err = bc.dao.Height()
+		if err != nil {
+			return nil, err
+		}
+		newblockHeight = tipHeight + 1
+		blkHash, err := bc.dao.GetBlockHash(tipHeight)
+		if err != nil {
+			return nil, err
+		}
+		prevHash = blkHash[:]
 	}
-	newblockHeight := tipHeight + 1
-	ctx, err := bc.context(context.Background(), tipHeight)
+	ctx, err := bc.contextByHash(context.Background(), prevHash)
 	if err != nil {
 		return nil, err
 	}
 	tip := protocol.MustGetBlockchainCtx(ctx).Tip
-
-	// retrieve the draft block if it's prepared
-	pblk, err := bc.blockPreparer.WaitBlock(tip.Hash[:])
-	if err != nil {
-		log.L().Error("Failed to prepare new block", zap.Error(err))
-	} else if pblk != nil && pblk.Timestamp() == timestamp {
-		if err = bc.proposalPool.AddBlock(pblk); err != nil {
-			log.L().Warn("failed to add block to proposal pool", zap.Error(err), zap.Uint64("height", pblk.Height()), zap.Time("timestamp", pblk.Timestamp()))
-		}
-		blkHash := pblk.HashBlock()
-		log.L().Debug("Produce a new block from draft block.", zap.Uint64("height", newblockHeight), zap.Time("timestamp", timestamp), log.Hex("hash", blkHash[:]))
-		return pblk, nil
-	}
-	log.L().Info("Produce a new block.", zap.Uint64("height", newblockHeight), zap.Time("timestamp", timestamp))
 	// create a new block
+	log.L().Debug("Produce a new block.", zap.Uint64("height", newblockHeight), zap.Time("timestamp", timestamp))
 	ctx = bc.contextWithBlock(ctx, bc.config.ProducerAddress(), newblockHeight, timestamp, protocol.CalcBaseFee(genesis.MustExtractGenesisContext(ctx).Blockchain, &tip), protocol.CalcExcessBlobGas(tip.ExcessBlobGas, tip.BlobGasUsed))
 	ctx = protocol.WithFeatureCtx(ctx)
 	// run execution and update state trie root hash
+	return bc.mintBlock(ctx)
+}
+
+func (bc *blockchain) mintBlock(ctx context.Context) (*block.Block, error) {
 	minterPrivateKey := bc.config.ProducerPrivateKey()
 	blockBuilder, err := bc.bbf.NewBlockBuilder(
 		ctx,
@@ -537,13 +543,13 @@ func (bc *blockchain) MintNewBlock(timestamp time.Time) (*block.Block, error) {
 		},
 	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create block builder at new block height %d", newblockHeight)
+		return nil, errors.Wrapf(err, "failed to create block builder")
 	}
 	blk, err := blockBuilder.SignAndBuild(minterPrivateKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create block")
 	}
-	if err = bc.proposalPool.AddBlock(&blk); err != nil {
+	if err = bc.bbf.AddProposal(&blk); err != nil {
 		log.L().Warn("failed to add block to proposal pool", zap.Error(err), zap.Uint64("height", blk.Height()), zap.Time("timestamp", blk.Timestamp()))
 	}
 	_blockMtc.WithLabelValues("MintGas").Set(float64(blk.GasUsed()))
@@ -594,25 +600,44 @@ func (bc *blockchain) tipInfo(tipHeight uint64) (*protocol.TipInfo, error) {
 			Timestamp: time.Unix(bc.genesis.Timestamp, 0),
 		}, nil
 	}
-	daoHeight, err := bc.dao.Height()
-	if err != nil {
-		return nil, err
-	}
-	var header *block.Header
-	if tipHeight > daoHeight {
-		if blk := bc.proposalPool.Block(tipHeight); blk != nil {
-			header = &blk.Header
-		} else {
-			err = errors.Wrapf(db.ErrNotExist, "draft block not found at height %d", tipHeight)
-		}
-	} else {
-		header, err = bc.dao.HeaderByHeight(tipHeight)
-	}
+	header, err := bc.dao.HeaderByHeight(tipHeight)
 	if err != nil {
 		return nil, err
 	}
 	return &protocol.TipInfo{
 		Height:        tipHeight,
+		GasUsed:       header.GasUsed(),
+		Hash:          header.HashBlock(),
+		Timestamp:     header.Timestamp(),
+		BaseFee:       header.BaseFee(),
+		BlobGasUsed:   header.BlobGasUsed(),
+		ExcessBlobGas: header.ExcessBlobGas(),
+	}, nil
+}
+
+func (bc *blockchain) tipInfoByHash(tipHash []byte) (*protocol.TipInfo, error) {
+	if hash.Hash256(tipHash) == bc.genesis.Hash() {
+		return &protocol.TipInfo{
+			Height:    0,
+			Hash:      bc.genesis.Hash(),
+			Timestamp: time.Unix(bc.genesis.Timestamp, 0),
+		}, nil
+	}
+
+	header, err := bc.dao.Header(hash.Hash256(tipHash))
+	switch errors.Cause(err) {
+	case nil:
+	case db.ErrNotExist:
+		if blk := bc.bbf.Block(hash.Hash256(tipHash)); blk == nil {
+			return nil, err
+		} else {
+			header = &blk.Header
+		}
+	default:
+		return nil, err
+	}
+	return &protocol.TipInfo{
+		Height:        header.Height(),
 		GasUsed:       header.GasUsed(),
 		Hash:          header.HashBlock(),
 		Timestamp:     header.Timestamp(),

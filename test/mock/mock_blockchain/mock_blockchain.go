@@ -185,18 +185,23 @@ func (mr *MockBlockchainMockRecorder) Genesis() *gomock.Call {
 }
 
 // MintNewBlock mocks base method.
-func (m *MockBlockchain) MintNewBlock(timestamp time.Time) (*block.Block, error) {
+func (m *MockBlockchain) MintNewBlock(timestamp time.Time, opts ...blockchain.MintOpt) (*block.Block, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MintNewBlock", timestamp)
+	varargs := []interface{}{timestamp}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MintNewBlock", varargs...)
 	ret0, _ := ret[0].(*block.Block)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // MintNewBlock indicates an expected call of MintNewBlock.
-func (mr *MockBlockchainMockRecorder) MintNewBlock(timestamp interface{}) *gomock.Call {
+func (mr *MockBlockchainMockRecorder) MintNewBlock(timestamp interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MintNewBlock", reflect.TypeOf((*MockBlockchain)(nil).MintNewBlock), timestamp)
+	varargs := append([]interface{}{timestamp}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MintNewBlock", reflect.TypeOf((*MockBlockchain)(nil).MintNewBlock), varargs...)
 }
 
 // PendingHeight mocks base method.
@@ -211,20 +216,6 @@ func (m *MockBlockchain) PendingHeight() uint64 {
 func (mr *MockBlockchainMockRecorder) PendingHeight() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PendingHeight", reflect.TypeOf((*MockBlockchain)(nil).PendingHeight))
-}
-
-// PrepareBlock mocks base method.
-func (m *MockBlockchain) PrepareBlock(prevHash []byte, timestamp time.Time) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PrepareBlock", prevHash, timestamp)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PrepareBlock indicates an expected call of PrepareBlock.
-func (mr *MockBlockchainMockRecorder) PrepareBlock(prevHash, timestamp interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareBlock", reflect.TypeOf((*MockBlockchain)(nil).PrepareBlock), prevHash, timestamp)
 }
 
 // RemoveSubscriber mocks base method.
@@ -339,6 +330,74 @@ func (m *MockBlockBuilderFactory) EXPECT() *MockBlockBuilderFactoryMockRecorder 
 	return m.recorder
 }
 
+// AddProposal mocks base method.
+func (m *MockBlockBuilderFactory) AddProposal(arg0 *block.Block) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddProposal", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddProposal indicates an expected call of AddProposal.
+func (mr *MockBlockBuilderFactoryMockRecorder) AddProposal(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddProposal", reflect.TypeOf((*MockBlockBuilderFactory)(nil).AddProposal), arg0)
+}
+
+// Block mocks base method.
+func (m *MockBlockBuilderFactory) Block(arg0 hash.Hash256) *block.Block {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Block", arg0)
+	ret0, _ := ret[0].(*block.Block)
+	return ret0
+}
+
+// Block indicates an expected call of Block.
+func (mr *MockBlockBuilderFactoryMockRecorder) Block(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Block", reflect.TypeOf((*MockBlockBuilderFactory)(nil).Block), arg0)
+}
+
+// BlockByHeight mocks base method.
+func (m *MockBlockBuilderFactory) BlockByHeight(arg0 uint64) *block.Block {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockByHeight", arg0)
+	ret0, _ := ret[0].(*block.Block)
+	return ret0
+}
+
+// BlockByHeight indicates an expected call of BlockByHeight.
+func (mr *MockBlockBuilderFactoryMockRecorder) BlockByHeight(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByHeight", reflect.TypeOf((*MockBlockBuilderFactory)(nil).BlockByHeight), arg0)
+}
+
+// Forks mocks base method.
+func (m *MockBlockBuilderFactory) Forks() []*block.Block {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Forks")
+	ret0, _ := ret[0].([]*block.Block)
+	return ret0
+}
+
+// Forks indicates an expected call of Forks.
+func (mr *MockBlockBuilderFactoryMockRecorder) Forks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Forks", reflect.TypeOf((*MockBlockBuilderFactory)(nil).Forks))
+}
+
+// Init mocks base method.
+func (m *MockBlockBuilderFactory) Init(arg0 hash.Hash256) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Init", arg0)
+}
+
+// Init indicates an expected call of Init.
+func (mr *MockBlockBuilderFactoryMockRecorder) Init(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockBlockBuilderFactory)(nil).Init), arg0)
+}
+
 // NewBlockBuilder mocks base method.
 func (m *MockBlockBuilderFactory) NewBlockBuilder(arg0 context.Context, arg1 func(action.Envelope) (*action.SealedEnvelope, error)) (*block.Builder, error) {
 	m.ctrl.T.Helper()
@@ -352,4 +411,18 @@ func (m *MockBlockBuilderFactory) NewBlockBuilder(arg0 context.Context, arg1 fun
 func (mr *MockBlockBuilderFactoryMockRecorder) NewBlockBuilder(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewBlockBuilder", reflect.TypeOf((*MockBlockBuilderFactory)(nil).NewBlockBuilder), arg0, arg1)
+}
+
+// ReceiveBlock mocks base method.
+func (m *MockBlockBuilderFactory) ReceiveBlock(arg0 *block.Block) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReceiveBlock", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReceiveBlock indicates an expected call of ReceiveBlock.
+func (mr *MockBlockBuilderFactoryMockRecorder) ReceiveBlock(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveBlock", reflect.TypeOf((*MockBlockBuilderFactory)(nil).ReceiveBlock), arg0)
 }

@@ -1,6 +1,7 @@
-package blockchain
+package factory
 
 import (
+	"sort"
 	"sync"
 	"time"
 
@@ -116,6 +117,21 @@ func (d *proposalPool) BlockByHash(hash hash.Hash256) *block.Block {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.blocks[hash]
+}
+
+func (d *proposalPool) Tips() []*block.Block {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var tips []*block.Block
+	for fork := range d.forks {
+		if b := d.blocks[fork]; b != nil {
+			tips = append(tips, b)
+		}
+	}
+	sort.Slice(tips, func(i, j int) bool {
+		return tips[i].Timestamp().After(tips[j].Timestamp())
+	})
+	return tips
 }
 
 // Tip returns the tip height of the latest fork

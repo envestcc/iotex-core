@@ -1,7 +1,8 @@
-package blockchain
+package factory
 
 import (
 	"sync"
+	"time"
 
 	"github.com/iotexproject/go-pkgs/hash"
 	"go.uber.org/zap"
@@ -11,41 +12,42 @@ import (
 )
 
 type (
-	blockPreparer struct {
-		tasks map[hash.Hash256]chan *mintResult
+	blockPreparer[T any] struct {
+		tasks map[hash.Hash256]chan *mintResult[T]
 		mu    sync.Mutex
 	}
-	mintResult struct {
-		blk *block.Block
+	mintResult[T any] struct {
+		blk T
 		err error
 	}
 )
 
-func newBlockPreparer() *blockPreparer {
-	return &blockPreparer{
-		tasks: make(map[hash.Hash256]chan *mintResult),
+func newBlockPreparer() *blockPreparer[*block.Builder] {
+	return &blockPreparer[*block.Builder]{
+		tasks: make(map[hash.Hash256]chan *mintResult[*block.Builder]),
 	}
 }
 
-func (d *blockPreparer) PrepareBlock(prevHash []byte, mintFn func() (*block.Block, error)) {
+func (d *blockPreparer[T]) PrepareBlock(prevHash []byte, timestamp time.Time, mintFn func() (T, error)) {
 	d.mu.Lock()
 	if _, ok := d.tasks[hash.BytesToHash256(prevHash)]; ok {
 		log.L().Debug("draft block already exists", log.Hex("prevHash", prevHash))
 		d.mu.Unlock()
 		return
 	}
-	res := make(chan *mintResult, 1)
+	res := make(chan *mintResult[T], 1)
 	d.tasks[hash.BytesToHash256(prevHash)] = res
 	d.mu.Unlock()
 
 	go func() {
 		blk, err := mintFn()
-		res <- &mintResult{blk: blk, err: err}
+		res <- &mintResult[T]{blk: blk, err: err}
 		log.L().Debug("prepare mint returned", zap.Error(err))
 	}()
 }
 
-func (d *blockPreparer) WaitBlock(prevHash []byte) (*block.Block, error) {
+func (d *blockPreparer[T]) WaitBlock(prevHash []byte, timestamp time.Time) (T, error) {
+	var null T
 	d.mu.Lock()
 	hash := hash.Hash256(prevHash)
 	if ch, ok := d.tasks[hash]; ok {
@@ -57,10 +59,10 @@ func (d *blockPreparer) WaitBlock(prevHash []byte) (*block.Block, error) {
 		return res.blk, res.err
 	}
 	d.mu.Unlock()
-	return nil, nil
+	return null, nil
 }
 
-func (d *blockPreparer) ReceiveBlock(blk *block.Block) error {
+func (d *blockPreparer[T]) ReceiveBlock(blk *block.Block) error {
 	d.mu.Lock()
 	delete(d.tasks, blk.PrevHash())
 	d.mu.Unlock()

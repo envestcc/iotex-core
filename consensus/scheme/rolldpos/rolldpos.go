@@ -141,7 +141,8 @@ func (cm *chainManager) MintNewBlock(height uint64, timestamp time.Time) (*block
 
 // PrepareBlock prepares a new block with given parent hash
 func (cm *chainManager) PrepareBlock(prevHash []byte, timestamp time.Time) error {
-	return cm.bc.PrepareBlock(prevHash, timestamp)
+	go cm.bc.MintNewBlock(timestamp, blockchain.WithMintPrevHash(prevHash))
+	return nil
 }
 
 // CommitBlock validates and appends a block to the chain
