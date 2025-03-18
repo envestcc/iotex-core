@@ -105,7 +105,6 @@ func (ctx *roundCtx) IsDelegate(addr string) bool {
 			return true
 		}
 	}
-
 	return false
 }
 

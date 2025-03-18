@@ -20,7 +20,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
-	"github.com/iotexproject/iotex-core/v2/action"
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
 	"github.com/iotexproject/iotex-core/v2/blockchain/blockdao"
@@ -69,26 +68,7 @@ type (
 	Blockchain interface {
 		lifecycle.StartStopper
 
-		// For exposing blockchain states
-		// BlockHeaderByHeight return block header by height
-		BlockHeaderByHeight(height uint64) (*block.Header, error)
-		// BlockFooterByHeight return block footer by height
-		BlockFooterByHeight(height uint64) (*block.Footer, error)
-		// ChainID returns the chain ID
-		ChainID() uint32
-		// EvmNetworkID returns the evm network ID
-		EvmNetworkID() uint32
-		// ChainAddress returns chain address on parent chain, the root chain return empty.
-		ChainAddress() string
-		// TipHash returns tip confirmed block's hash
-		TipHash() hash.Hash256
-		// TipHeight returns tip confirmed block's height
-		TipHeight() uint64
-		// PendingHeight returns the latest height of the pending block
-		// if there is no pending block, it returns the tip height
-		PendingHeight() uint64
-		// Genesis returns the genesis
-		Genesis() genesis.Genesis
+		BlockchainReadOnly
 		// Context returns current context
 		Context(context.Context) (context.Context, error)
 		// ContextAtHeight returns context at given height
@@ -108,16 +88,37 @@ type (
 
 		// RemoveSubscriber make you listen to every single produced block
 		RemoveSubscriber(BlockCreationSubscriber) error
+
+		Fork(hash.Hash256) (BlockchainReadOnly, error)
+	}
+
+	BlockchainReadOnly interface {
+		// For exposing blockchain states
+		// BlockHeaderByHeight return block header by height
+		BlockHeaderByHeight(height uint64) (*block.Header, error)
+		// BlockFooterByHeight return block footer by height
+		BlockFooterByHeight(height uint64) (*block.Footer, error)
+		// ChainID returns the chain ID
+		ChainID() uint32
+		// EvmNetworkID returns the evm network ID
+		EvmNetworkID() uint32
+		// ChainAddress returns chain address on parent chain, the root chain return empty.
+		ChainAddress() string
+		// TipHash returns tip confirmed block's hash
+		TipHash() hash.Hash256
+		// TipHeight returns tip confirmed block's height
+		TipHeight() uint64
+		// Genesis returns the genesis
+		Genesis() genesis.Genesis
 	}
 
 	// BlockBuilderFactory is the factory interface of block builder
 	BlockBuilderFactory interface {
 		// NewBlockBuilder creates block builder
-		NewBlockBuilder(context.Context, func(action.Envelope) (*action.SealedEnvelope, error)) (*block.Builder, error)
+		Mint(ctx context.Context) (*block.Block, error)
 		ReceiveBlock(*block.Block) error
 		Init(hash.Hash256)
 		AddProposal(*block.Block) error
-		Forks() []*block.Block
 		Block(hash.Hash256) *block.Block
 		BlockByHeight(uint64) *block.Block
 	}
@@ -277,18 +278,7 @@ func (bc *blockchain) Stop(ctx context.Context) error {
 }
 
 func (bc *blockchain) BlockHeaderByHeight(height uint64) (*block.Header, error) {
-	header, err := bc.dao.HeaderByHeight(height)
-	switch errors.Cause(err) {
-	case nil:
-		return header, nil
-	case db.ErrNotExist:
-		if blk := bc.bbf.BlockByHeight(height); blk != nil {
-			return &blk.Header, nil
-		}
-		return nil, err
-	default:
-		return nil, err
-	}
+	return bc.dao.HeaderByHeight(height)
 }
 
 func (bc *blockchain) BlockFooterByHeight(height uint64) (*block.Footer, error) {
@@ -468,14 +458,6 @@ func (bc *blockchain) contextWithTipInfo(ctx context.Context, tip *protocol.TipI
 	return protocol.WithFeatureWithHeightCtx(ctx)
 }
 
-func (bc *blockchain) PendingHeight() uint64 {
-	var pending uint64
-	if forks := bc.bbf.Forks(); len(forks) > 0 {
-		pending = forks[0].Height()
-	}
-	return max(pending, bc.TipHeight())
-}
-
 func (bc *blockchain) blockByHash(hash hash.Hash256) (*block.Block, error) {
 	if blk := bc.bbf.Block(hash); blk != nil {
 		return blk, nil
@@ -527,39 +509,22 @@ func (bc *blockchain) MintNewBlock(timestamp time.Time, opts ...MintOpt) (*block
 	}
 	tip := protocol.MustGetBlockchainCtx(ctx).Tip
 	// create a new block
-	log.L().Debug("Produce a new block.", zap.Uint64("height", newblockHeight), zap.Time("timestamp", timestamp))
+	log.L().Debug("Produce a new block.", zap.Uint64("height", newblockHeight), zap.Time("timestamp", timestamp), log.Hex("prevHash", prevHash))
 	ctx = bc.contextWithBlock(ctx, bc.config.ProducerAddress(), newblockHeight, timestamp, protocol.CalcBaseFee(genesis.MustExtractGenesisContext(ctx).Blockchain, &tip), protocol.CalcExcessBlobGas(tip.ExcessBlobGas, tip.BlobGasUsed))
 	ctx = protocol.WithFeatureCtx(ctx)
 	// run execution and update state trie root hash
-	return bc.mintBlock(ctx)
-}
-
-func (bc *blockchain) mintBlock(ctx context.Context) (*block.Block, error) {
-	minterPrivateKey := bc.config.ProducerPrivateKey()
-	blockBuilder, err := bc.bbf.NewBlockBuilder(
-		ctx,
-		func(elp action.Envelope) (*action.SealedEnvelope, error) {
-			return action.Sign(elp, minterPrivateKey)
-		},
-	)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create block builder")
-	}
-	blk, err := blockBuilder.SignAndBuild(minterPrivateKey)
+	blk, err := bc.bbf.Mint(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create block")
 	}
-	if err = bc.bbf.AddProposal(&blk); err != nil {
-		log.L().Warn("failed to add block to proposal pool", zap.Error(err), zap.Uint64("height", blk.Height()), zap.Time("timestamp", blk.Timestamp()))
-	}
 	_blockMtc.WithLabelValues("MintGas").Set(float64(blk.GasUsed()))
 	_blockMtc.WithLabelValues("MintActions").Set(float64(len(blk.Actions)))
-	return &blk, nil
+	return blk, nil
 }
 
 // CommitBlock validates and appends a block to the chain
 func (bc *blockchain) CommitBlock(blk *block.Block) error {
-	log.L().Debug("Commit a block.", zap.Uint64("height", blk.Height()), zap.String("ioAddr", bc.config.ProducerAddress().String()))
+	log.L().Info("Commit a block.", zap.Uint64("height", blk.Height()), zap.String("ioAddr", bc.config.ProducerAddress().String()))
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 	timer := bc.timerFactory.NewTimer("CommitBlock")
@@ -578,6 +543,18 @@ func (bc *blockchain) AddSubscriber(s BlockCreationSubscriber) error {
 
 func (bc *blockchain) RemoveSubscriber(s BlockCreationSubscriber) error {
 	return bc.pubSubManager.RemoveBlockListener(s)
+}
+
+func (bc *blockchain) Fork(hash hash.Hash256) (BlockchainReadOnly, error) {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
+	if bc.TipHash() == hash {
+		return bc, nil
+	}
+	if bc.bbf.Block(hash) == nil {
+		return nil, errors.Errorf("block %x is not in the proposal pool, tip height %d", hash, bc.TipHeight())
+	}
+	return &blockchainFork{blockchain: bc, head: hash}, nil
 }
 
 //======================================

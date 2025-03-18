@@ -152,11 +152,11 @@ func TestHandleStakeMigrate(t *testing.T) {
 	r.Equal(uint64(iotextypes.ReceiptStatus_Success), receipts[0].Status)
 	r.Equal(uint64(iotextypes.ReceiptStatus_Success), receipts[1].Status)
 	excPrtl := execution.NewProtocol(
-		func(u uint64) (hash.Hash256, error) { return hash.ZeroHash256, nil },
+		func(u uint64, _ []byte) (hash.Hash256, error) { return hash.ZeroHash256, nil },
 		func(context.Context, protocol.StateManager, *big.Int, ...protocol.DepositOption) ([]*action.TransactionLog, error) {
 			return nil, nil
 		},
-		func(uint64) (time.Time, error) { return time.Now(), nil },
+		func(uint64, []byte) (time.Time, error) { return time.Now(), nil },
 	)
 	reg := protocol.NewRegistry()
 	r.NoError(excPrtl.Register(reg))

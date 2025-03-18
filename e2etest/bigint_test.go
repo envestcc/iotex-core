@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/iotexproject/go-pkgs/crypto"
+	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/stretchr/testify/require"
 
 	"github.com/iotexproject/iotex-address/address"
@@ -41,7 +42,7 @@ const (
 	_executorPriKey = "cfa6ef757dee2e50351620dca002d32b9c090cfda55fb81f37f1d26b273743f1"
 )
 
-func fakeGetBlockTime(uint64) (time.Time, error) { return time.Time{}, nil }
+func fakeGetBlockTime(uint64, []byte) (time.Time, error) { return time.Time{}, nil }
 
 func TestTransfer_Negative(t *testing.T) {
 	r := require.New(t)
@@ -106,7 +107,7 @@ func prepareBlockchain(ctx context.Context, _executor string, r *require.Asserti
 		cfg.Chain,
 		cfg.Genesis,
 		dao,
-		factory.NewMinter(sf, ap),
+		factory.NewMinter(sf, ap, factory.WithPrivateKeyOption(cfg.Chain.ProducerPrivateKey())),
 		blockchain.BlockValidatorOption(block.NewValidator(
 			sf,
 			genericValidator,
@@ -116,7 +117,9 @@ func prepareBlockchain(ctx context.Context, _executor string, r *require.Asserti
 	reward := rewarding.NewProtocol(cfg.Genesis.Rewarding)
 	r.NoError(reward.Register(registry))
 
-	ep := execution.NewProtocol(dao.GetBlockHash, rewarding.DepositGas, fakeGetBlockTime)
+	ep := execution.NewProtocol(func(u uint64, b []byte) (hash.Hash256, error) {
+		return dao.GetBlockHash(u)
+	}, rewarding.DepositGas, fakeGetBlockTime)
 	r.NoError(ep.Register(registry))
 	r.NoError(bc.Start(ctx))
 	ctx = genesis.WithGenesisContext(ctx, cfg.Genesis)

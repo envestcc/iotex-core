@@ -1983,7 +1983,7 @@ func prepareContractStakingBlockchain(ctx context.Context, cfg config.Config, r 
 		cfg.Chain,
 		cfg.Genesis,
 		dao,
-		factory.NewMinter(sf, ap),
+		factory.NewMinter(sf, ap, factory.WithPrivateKeyOption(cfg.Chain.ProducerPrivateKey())),
 		blockchain.BlockValidatorOption(block.NewValidator(
 			sf,
 			protocol.NewGenericValidator(sf, accountutil.AccountState),
@@ -1993,7 +1993,9 @@ func prepareContractStakingBlockchain(ctx context.Context, cfg config.Config, r 
 	// r.NoError(reward.Register(registry))
 
 	r.NotNil(bc)
-	execution := execution.NewProtocol(dao.GetBlockHash, rewarding.DepositGas, fakeGetBlockTime)
+	execution := execution.NewProtocol(func(u uint64, b []byte) (hash.Hash256, error) {
+		return dao.GetBlockHash(u)
+	}, rewarding.DepositGas, fakeGetBlockTime)
 	r.NoError(execution.Register(registry))
 	r.NoError(bc.Start(ctx))
 

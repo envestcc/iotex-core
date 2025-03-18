@@ -118,12 +118,12 @@ func (cc *consortiumCommittee) CreateGenesisStates(ctx context.Context, sm proto
 	}
 	ctx = protocol.WithActionCtx(ctx, actionCtx)
 	ctx = protocol.WithBlockCtx(ctx, blkCtx)
-	getBlockTime := func(u uint64) (time.Time, error) {
+	getBlockTime := func(u uint64, fork []byte) (time.Time, error) {
 		// make sure the returned timestamp is after the current block time so that evm upgrades based on timestamp (Shanghai and onwards) are disabled
 		return blkCtx.BlockTimeStamp.Add(5 * time.Second), nil
 	}
 	ctx = evm.WithHelperCtx(ctx, evm.HelperContext{
-		GetBlockHash: func(height uint64) (hash.Hash256, error) {
+		GetBlockHash: func(height uint64, fork []byte) (hash.Hash256, error) {
 			return hash.ZeroHash256, nil
 		},
 		GetBlockTime: getBlockTime,

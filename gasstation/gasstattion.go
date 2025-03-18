@@ -199,7 +199,9 @@ func (gs *GasStation) FeeHistory(ctx context.Context, blocks, lastBlock uint64, 
 				}
 				fees := make([]*big.Int, 0, len(receipts))
 				for _, r := range receipts {
-					fees = append(fees, r.PriorityFee())
+					if fee := r.PriorityFee(); fee != nil {
+						fees = append(fees, fee)
+					}
 				}
 				sort.Slice(fees, func(i, j int) bool {
 					return fees[i].Cmp(fees[j]) < 0
@@ -231,6 +233,10 @@ func (gs *GasStation) FeeHistory(ctx context.Context, blocks, lastBlock uint64, 
 func feesPercentiles(ascFees []*big.Int, percentiles []float64) []*big.Int {
 	res := make([]*big.Int, len(percentiles))
 	for i, p := range percentiles {
+		if len(ascFees) == 0 {
+			res[i] = big.NewInt(0)
+			continue
+		}
 		idx := int(float64(len(ascFees)) * p)
 		if idx >= len(ascFees) {
 			idx = len(ascFees) - 1

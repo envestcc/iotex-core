@@ -11,7 +11,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	hash "github.com/iotexproject/go-pkgs/hash"
-	action "github.com/iotexproject/iotex-core/v2/action"
 	blockchain "github.com/iotexproject/iotex-core/v2/blockchain"
 	block "github.com/iotexproject/iotex-core/v2/blockchain/block"
 	genesis "github.com/iotexproject/iotex-core/v2/blockchain/genesis"
@@ -170,6 +169,21 @@ func (mr *MockBlockchainMockRecorder) EvmNetworkID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvmNetworkID", reflect.TypeOf((*MockBlockchain)(nil).EvmNetworkID))
 }
 
+// Fork mocks base method.
+func (m *MockBlockchain) Fork(arg0 hash.Hash256) (blockchain.BlockchainReadOnly, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Fork", arg0)
+	ret0, _ := ret[0].(blockchain.BlockchainReadOnly)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Fork indicates an expected call of Fork.
+func (mr *MockBlockchainMockRecorder) Fork(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fork", reflect.TypeOf((*MockBlockchain)(nil).Fork), arg0)
+}
+
 // Genesis mocks base method.
 func (m *MockBlockchain) Genesis() genesis.Genesis {
 	m.ctrl.T.Helper()
@@ -202,20 +216,6 @@ func (mr *MockBlockchainMockRecorder) MintNewBlock(timestamp interface{}, opts .
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{timestamp}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MintNewBlock", reflect.TypeOf((*MockBlockchain)(nil).MintNewBlock), varargs...)
-}
-
-// PendingHeight mocks base method.
-func (m *MockBlockchain) PendingHeight() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PendingHeight")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// PendingHeight indicates an expected call of PendingHeight.
-func (mr *MockBlockchainMockRecorder) PendingHeight() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PendingHeight", reflect.TypeOf((*MockBlockchain)(nil).PendingHeight))
 }
 
 // RemoveSubscriber mocks base method.
@@ -307,6 +307,143 @@ func (mr *MockBlockchainMockRecorder) ValidateBlock(arg0 interface{}, arg1 ...in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateBlock", reflect.TypeOf((*MockBlockchain)(nil).ValidateBlock), varargs...)
 }
 
+// MockBlockchainReadOnly is a mock of BlockchainReadOnly interface.
+type MockBlockchainReadOnly struct {
+	ctrl     *gomock.Controller
+	recorder *MockBlockchainReadOnlyMockRecorder
+}
+
+// MockBlockchainReadOnlyMockRecorder is the mock recorder for MockBlockchainReadOnly.
+type MockBlockchainReadOnlyMockRecorder struct {
+	mock *MockBlockchainReadOnly
+}
+
+// NewMockBlockchainReadOnly creates a new mock instance.
+func NewMockBlockchainReadOnly(ctrl *gomock.Controller) *MockBlockchainReadOnly {
+	mock := &MockBlockchainReadOnly{ctrl: ctrl}
+	mock.recorder = &MockBlockchainReadOnlyMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockBlockchainReadOnly) EXPECT() *MockBlockchainReadOnlyMockRecorder {
+	return m.recorder
+}
+
+// BlockFooterByHeight mocks base method.
+func (m *MockBlockchainReadOnly) BlockFooterByHeight(height uint64) (*block.Footer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockFooterByHeight", height)
+	ret0, _ := ret[0].(*block.Footer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BlockFooterByHeight indicates an expected call of BlockFooterByHeight.
+func (mr *MockBlockchainReadOnlyMockRecorder) BlockFooterByHeight(height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockFooterByHeight", reflect.TypeOf((*MockBlockchainReadOnly)(nil).BlockFooterByHeight), height)
+}
+
+// BlockHeaderByHeight mocks base method.
+func (m *MockBlockchainReadOnly) BlockHeaderByHeight(height uint64) (*block.Header, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockHeaderByHeight", height)
+	ret0, _ := ret[0].(*block.Header)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BlockHeaderByHeight indicates an expected call of BlockHeaderByHeight.
+func (mr *MockBlockchainReadOnlyMockRecorder) BlockHeaderByHeight(height interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockHeaderByHeight", reflect.TypeOf((*MockBlockchainReadOnly)(nil).BlockHeaderByHeight), height)
+}
+
+// ChainAddress mocks base method.
+func (m *MockBlockchainReadOnly) ChainAddress() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChainAddress")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ChainAddress indicates an expected call of ChainAddress.
+func (mr *MockBlockchainReadOnlyMockRecorder) ChainAddress() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChainAddress", reflect.TypeOf((*MockBlockchainReadOnly)(nil).ChainAddress))
+}
+
+// ChainID mocks base method.
+func (m *MockBlockchainReadOnly) ChainID() uint32 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChainID")
+	ret0, _ := ret[0].(uint32)
+	return ret0
+}
+
+// ChainID indicates an expected call of ChainID.
+func (mr *MockBlockchainReadOnlyMockRecorder) ChainID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChainID", reflect.TypeOf((*MockBlockchainReadOnly)(nil).ChainID))
+}
+
+// EvmNetworkID mocks base method.
+func (m *MockBlockchainReadOnly) EvmNetworkID() uint32 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EvmNetworkID")
+	ret0, _ := ret[0].(uint32)
+	return ret0
+}
+
+// EvmNetworkID indicates an expected call of EvmNetworkID.
+func (mr *MockBlockchainReadOnlyMockRecorder) EvmNetworkID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvmNetworkID", reflect.TypeOf((*MockBlockchainReadOnly)(nil).EvmNetworkID))
+}
+
+// Genesis mocks base method.
+func (m *MockBlockchainReadOnly) Genesis() genesis.Genesis {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Genesis")
+	ret0, _ := ret[0].(genesis.Genesis)
+	return ret0
+}
+
+// Genesis indicates an expected call of Genesis.
+func (mr *MockBlockchainReadOnlyMockRecorder) Genesis() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Genesis", reflect.TypeOf((*MockBlockchainReadOnly)(nil).Genesis))
+}
+
+// TipHash mocks base method.
+func (m *MockBlockchainReadOnly) TipHash() hash.Hash256 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TipHash")
+	ret0, _ := ret[0].(hash.Hash256)
+	return ret0
+}
+
+// TipHash indicates an expected call of TipHash.
+func (mr *MockBlockchainReadOnlyMockRecorder) TipHash() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TipHash", reflect.TypeOf((*MockBlockchainReadOnly)(nil).TipHash))
+}
+
+// TipHeight mocks base method.
+func (m *MockBlockchainReadOnly) TipHeight() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TipHeight")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// TipHeight indicates an expected call of TipHeight.
+func (mr *MockBlockchainReadOnlyMockRecorder) TipHeight() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TipHeight", reflect.TypeOf((*MockBlockchainReadOnly)(nil).TipHeight))
+}
+
 // MockBlockBuilderFactory is a mock of BlockBuilderFactory interface.
 type MockBlockBuilderFactory struct {
 	ctrl     *gomock.Controller
@@ -372,20 +509,6 @@ func (mr *MockBlockBuilderFactoryMockRecorder) BlockByHeight(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByHeight", reflect.TypeOf((*MockBlockBuilderFactory)(nil).BlockByHeight), arg0)
 }
 
-// Forks mocks base method.
-func (m *MockBlockBuilderFactory) Forks() []*block.Block {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Forks")
-	ret0, _ := ret[0].([]*block.Block)
-	return ret0
-}
-
-// Forks indicates an expected call of Forks.
-func (mr *MockBlockBuilderFactoryMockRecorder) Forks() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Forks", reflect.TypeOf((*MockBlockBuilderFactory)(nil).Forks))
-}
-
 // Init mocks base method.
 func (m *MockBlockBuilderFactory) Init(arg0 hash.Hash256) {
 	m.ctrl.T.Helper()
@@ -398,19 +521,19 @@ func (mr *MockBlockBuilderFactoryMockRecorder) Init(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockBlockBuilderFactory)(nil).Init), arg0)
 }
 
-// NewBlockBuilder mocks base method.
-func (m *MockBlockBuilderFactory) NewBlockBuilder(arg0 context.Context, arg1 func(action.Envelope) (*action.SealedEnvelope, error)) (*block.Builder, error) {
+// Mint mocks base method.
+func (m *MockBlockBuilderFactory) Mint(ctx context.Context) (*block.Block, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewBlockBuilder", arg0, arg1)
-	ret0, _ := ret[0].(*block.Builder)
+	ret := m.ctrl.Call(m, "Mint", ctx)
+	ret0, _ := ret[0].(*block.Block)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// NewBlockBuilder indicates an expected call of NewBlockBuilder.
-func (mr *MockBlockBuilderFactoryMockRecorder) NewBlockBuilder(arg0, arg1 interface{}) *gomock.Call {
+// Mint indicates an expected call of Mint.
+func (mr *MockBlockBuilderFactoryMockRecorder) Mint(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewBlockBuilder", reflect.TypeOf((*MockBlockBuilderFactory)(nil).NewBlockBuilder), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Mint", reflect.TypeOf((*MockBlockBuilderFactory)(nil).Mint), ctx)
 }
 
 // ReceiveBlock mocks base method.

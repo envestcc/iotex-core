@@ -1,10 +1,12 @@
 package factory
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/iotexproject/go-pkgs/hash"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
@@ -13,8 +15,9 @@ import (
 
 type (
 	blockPreparer[T any] struct {
-		tasks map[hash.Hash256]chan *mintResult[T]
-		mu    sync.Mutex
+		tasks   map[hash.Hash256]map[int64]chan struct{}
+		results map[hash.Hash256]map[int64]*mintResult[T]
+		mu      sync.Mutex
 	}
 	mintResult[T any] struct {
 		blk T
@@ -22,44 +25,56 @@ type (
 	}
 )
 
-func newBlockPreparer() *blockPreparer[*block.Builder] {
-	return &blockPreparer[*block.Builder]{
-		tasks: make(map[hash.Hash256]chan *mintResult[*block.Builder]),
+func newBlockPreparer() *blockPreparer[*block.Block] {
+	return &blockPreparer[*block.Block]{
+		tasks:   make(map[hash.Hash256]map[int64]chan struct{}),
+		results: make(map[hash.Hash256]map[int64]*mintResult[*block.Block]),
 	}
 }
 
-func (d *blockPreparer[T]) PrepareBlock(prevHash []byte, timestamp time.Time, mintFn func() (T, error)) {
+func (d *blockPreparer[T]) PrepareOrWait(ctx context.Context, prevHash []byte, timestamp time.Time, fn func() (T, error)) (T, error) {
 	d.mu.Lock()
-	if _, ok := d.tasks[hash.BytesToHash256(prevHash)]; ok {
-		log.L().Debug("draft block already exists", log.Hex("prevHash", prevHash))
-		d.mu.Unlock()
-		return
-	}
-	res := make(chan *mintResult[T], 1)
-	d.tasks[hash.BytesToHash256(prevHash)] = res
+	task := d.prepare(prevHash, timestamp, fn)
 	d.mu.Unlock()
+
+	select {
+	case <-task:
+	case <-ctx.Done():
+		var null T
+		return null, errors.Wrapf(ctx.Err(), "wait for draft block timeout %v", timestamp)
+	}
+
+	d.mu.Lock()
+	res := d.results[hash.Hash256(prevHash)][timestamp.UnixNano()]
+	d.mu.Unlock()
+	return res.blk, res.err
+}
+
+func (d *blockPreparer[T]) prepare(prevHash []byte, timestamp time.Time, mintFn func() (T, error)) chan struct{} {
+	if forks, ok := d.tasks[hash.BytesToHash256(prevHash)]; ok {
+		if ch, ok := forks[timestamp.UnixNano()]; ok {
+			log.L().Debug("draft block already exists", log.Hex("prevHash", prevHash))
+			return ch
+		}
+	} else {
+		d.tasks[hash.BytesToHash256(prevHash)] = make(map[int64]chan struct{})
+	}
+	task := make(chan struct{})
+	d.tasks[hash.BytesToHash256(prevHash)][timestamp.UnixNano()] = task
 
 	go func() {
 		blk, err := mintFn()
-		res <- &mintResult[T]{blk: blk, err: err}
+		d.mu.Lock()
+		if _, ok := d.results[hash.BytesToHash256(prevHash)]; !ok {
+			d.results[hash.BytesToHash256(prevHash)] = make(map[int64]*mintResult[T])
+		}
+		d.results[hash.BytesToHash256(prevHash)][timestamp.UnixNano()] = &mintResult[T]{blk: blk, err: err}
+		d.mu.Unlock()
+		close(task)
 		log.L().Debug("prepare mint returned", zap.Error(err))
 	}()
-}
 
-func (d *blockPreparer[T]) WaitBlock(prevHash []byte, timestamp time.Time) (T, error) {
-	var null T
-	d.mu.Lock()
-	hash := hash.Hash256(prevHash)
-	if ch, ok := d.tasks[hash]; ok {
-		d.mu.Unlock()
-		res := <-ch
-		d.mu.Lock()
-		delete(d.tasks, hash)
-		d.mu.Unlock()
-		return res.blk, res.err
-	}
-	d.mu.Unlock()
-	return null, nil
+	return task
 }
 
 func (d *blockPreparer[T]) ReceiveBlock(blk *block.Block) error {

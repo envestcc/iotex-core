@@ -1225,10 +1225,10 @@ func testSimulateExecution(ctx context.Context, sf Factory, t *testing.T) {
 	require.NoError(err)
 
 	ctx = evm.WithHelperCtx(ctx, evm.HelperContext{
-		GetBlockHash: func(uint64) (hash.Hash256, error) {
+		GetBlockHash: func(uint64, []byte) (hash.Hash256, error) {
 			return hash.ZeroHash256, nil
 		},
-		GetBlockTime: func(u uint64) (time.Time, error) {
+		GetBlockTime: func(u uint64, _ []byte) (time.Time, error) {
 			return time.Time{}, nil
 		},
 		DepositGasFunc: rewarding.DepositGas,

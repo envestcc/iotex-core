@@ -395,7 +395,7 @@ func (ctx *rollDPoSCtx) PrepareNextProposal(msg any) error {
 		return errors.Errorf("failed to get state reader at block %d, hash %x", blk.Height(), prevHash[:])
 	}
 	// check if the current node is the next proposer
-	nextProposer := ctx.roundCalc.ProposerAt(height, interval, startTime, sr)
+	nextProposer := ctx.roundCalc.ProposerAt(height, interval, startTime, sr, prevHash[:])
 	if ctx.encodedAddr != nextProposer {
 		return nil
 	}
@@ -580,7 +580,7 @@ func (ctx *rollDPoSCtx) Commit(msg interface{}) (bool, error) {
 
 	_consensusDurationMtc.WithLabelValues().Set(float64(time.Since(ctx.round.roundStartTime)))
 	if pendingBlock.Height() > 1 {
-		prevBlkProposeTime, err := ctx.chain.BlockProposeTime(pendingBlock.Height() - 1)
+		prevBlkProposeTime, err := ctx.chain.BlockProposeTime(pendingBlock.Height()-1, nil)
 		if err != nil {
 			ctx.logger().Error("Error when getting the previous block header.",
 				zap.Error(err),

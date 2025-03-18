@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ethCrypto "github.com/iotexproject/go-pkgs/crypto"
+	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/iotex-address/address"
 
 	"github.com/iotexproject/iotex-core/v2/action"
@@ -273,7 +274,7 @@ func newChainInDB() (blockchain.Blockchain, actpool.ActPool, error) {
 		cfg.Chain,
 		cfg.Genesis,
 		dao,
-		factory.NewMinter(sf, ap),
+		factory.NewMinter(sf, ap, factory.WithPrivateKeyOption(cfg.Chain.ProducerPrivateKey())),
 		blockchain.BlockValidatorOption(block.NewValidator(
 			sf,
 			protocol.NewGenericValidator(sf, accountutil.AccountState),
@@ -282,7 +283,9 @@ func newChainInDB() (blockchain.Blockchain, actpool.ActPool, error) {
 	if bc == nil {
 		return nil, nil, errors.New("pointer is nil")
 	}
-	ep := execution.NewProtocol(dao.GetBlockHash, rewarding.DepositGas, fakeGetBlockTime)
+	ep := execution.NewProtocol(func(u uint64, b []byte) (hash.Hash256, error) {
+		return dao.GetBlockHash(u)
+	}, rewarding.DepositGas, fakeGetBlockTime)
 	if err = ep.Register(registry); err != nil {
 		return nil, nil, err
 	}

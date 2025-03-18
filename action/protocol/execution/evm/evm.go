@@ -50,10 +50,10 @@ var (
 
 type (
 	// GetBlockHash gets block hash by height
-	GetBlockHash func(uint64) (hash.Hash256, error)
+	GetBlockHash func(uint64, []byte) (hash.Hash256, error)
 
 	// GetBlockTime gets block time by height
-	GetBlockTime func(uint64) (time.Time, error)
+	GetBlockTime func(uint64, []byte) (time.Time, error)
 )
 
 // CanTransfer checks whether the from account has enough balance
@@ -115,17 +115,20 @@ func newParams(
 	var (
 		actionCtx    = protocol.MustGetActionCtx(ctx)
 		blkCtx       = protocol.MustGetBlockCtx(ctx)
+		bcCtx        = protocol.MustGetBlockchainCtx(ctx)
 		featureCtx   = protocol.MustGetFeatureCtx(ctx)
 		g            = genesis.MustExtractGenesisContext(ctx)
 		helperCtx    = mustGetHelperCtx(ctx)
 		evmNetworkID = protocol.MustGetBlockchainCtx(ctx).EvmNetworkID
 		executorAddr = common.BytesToAddress(actionCtx.Caller.Bytes())
-		getBlockHash = helperCtx.GetBlockHash
+		getBlockHash = func(h uint64) (hash.Hash256, error) {
+			return helperCtx.GetBlockHash(h, bcCtx.Tip.Hash[:])
+		}
 
 		vmConfig  vm.Config
 		getHashFn vm.GetHashFunc
 	)
-
+	log.L().Debug("newParam", log.Hex("tiphash", bcCtx.Tip.Hash[:]))
 	gasLimit := execution.Gas()
 	// Reset gas limit to the system wide action gas limit cap if it's greater than it
 	if blkCtx.BlockHeight > 0 && featureCtx.SystemWideActionGasLimit && gasLimit > _preAleutianActionGasLimit {
@@ -187,7 +190,9 @@ func newParams(
 	if vmCfg, ok := protocol.GetVMConfigCtx(ctx); ok {
 		vmConfig = vmCfg
 	}
-	chainConfig, err := getChainConfig(g.Blockchain, blkCtx.BlockHeight, evmNetworkID, helperCtx.GetBlockTime)
+	chainConfig, err := getChainConfig(g.Blockchain, blkCtx.BlockHeight, evmNetworkID, func(h uint64) (time.Time, error) {
+		return helperCtx.GetBlockTime(h, bcCtx.Tip.Hash[:])
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +404,7 @@ func prepareStateDB(ctx context.Context, sm protocol.StateManager) (*StateDBAdap
 	)
 }
 
-func getChainConfig(g genesis.Blockchain, height uint64, id uint32, getBlockTime GetBlockTime) (*params.ChainConfig, error) {
+func getChainConfig(g genesis.Blockchain, height uint64, id uint32, getBlockTime func(uint64) (time.Time, error)) (*params.ChainConfig, error) {
 	var chainConfig params.ChainConfig
 	chainConfig.ConstantinopleBlock = new(big.Int).SetUint64(0) // Constantinople switch block (nil = no fork, 0 = already activated)
 	chainConfig.BeringBlock = new(big.Int).SetUint64(g.BeringBlockHeight)

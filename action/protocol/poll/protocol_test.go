@@ -42,10 +42,10 @@ func TestNewProtocol(t *testing.T) {
 		func(uint64, uint64) (map[string]uint64, error) {
 			return nil, nil
 		},
-		func(uint64) (hash.Hash256, error) {
+		func(uint64, []byte) (hash.Hash256, error) {
 			return hash.ZeroHash256, nil
 		},
-		func(u uint64) (time.Time, error) {
+		func(u uint64, _ []byte) (time.Time, error) {
 			return time.Time{}, nil
 		},
 	)

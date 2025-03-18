@@ -56,7 +56,7 @@ func (c *roundCalculator) UpdateRound(round *roundCtx, height uint64, blockInter
 			}
 		}
 	}
-	roundNum, roundStartTime, err := c.roundInfo(height, blockInterval, now, toleratedOvertime)
+	roundNum, roundStartTime, err := c.roundInfo(height, blockInterval, now, toleratedOvertime, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -110,13 +110,13 @@ func (c *roundCalculator) Proposer(height uint64, blockInterval time.Duration, r
 	return round.Proposer()
 }
 
-func (c *roundCalculator) ProposerAt(height uint64, blockInterval time.Duration, roundStartTime time.Time, sr protocol.StateReader) string {
+func (c *roundCalculator) ProposerAt(height uint64, blockInterval time.Duration, roundStartTime time.Time, sr protocol.StateReader, fork []byte) string {
 	proposers, err := c.Proposers(height, sr)
 	if err != nil {
 		log.L().Warn("Failed to get proposers", zap.Error(err))
 		return ""
 	}
-	roundNum, roundStartTime, err := c.roundInfo(height, blockInterval, roundStartTime, 0)
+	roundNum, roundStartTime, err := c.roundInfo(height, blockInterval, roundStartTime, 0, fork)
 	if err != nil {
 		log.L().Warn("Failed to get round info", zap.Error(err))
 		return ""
@@ -149,7 +149,7 @@ func (c *roundCalculator) RoundInfo(
 	blockInterval time.Duration,
 	now time.Time,
 ) (roundNum uint32, roundStartTime time.Time, err error) {
-	return c.roundInfo(height, blockInterval, now, 0)
+	return c.roundInfo(height, blockInterval, now, 0, nil)
 }
 
 func (c *roundCalculator) roundInfo(
@@ -157,15 +157,16 @@ func (c *roundCalculator) roundInfo(
 	blockInterval time.Duration,
 	now time.Time,
 	toleratedOvertime time.Duration,
+	fork []byte,
 ) (roundNum uint32, roundStartTime time.Time, err error) {
 	var lastBlockTime time.Time
-	if lastBlockTime, err = c.chain.BlockProposeTime(0); err != nil {
+	if lastBlockTime, err = c.chain.BlockProposeTime(0, fork); err != nil {
 		return
 	}
 	if height > 1 {
 		if height >= c.beringHeight {
 			var lastBlkProposeTime time.Time
-			if lastBlkProposeTime, err = c.chain.BlockProposeTime(height - 1); err != nil {
+			if lastBlkProposeTime, err = c.chain.BlockProposeTime(height-1, fork); err != nil {
 				return
 			}
 			lastBlockTime = lastBlockTime.Add(lastBlkProposeTime.Sub(lastBlockTime) / blockInterval * blockInterval)
@@ -255,7 +256,7 @@ func (c *roundCalculator) newRound(
 		if proposers, err = c.Proposers(height, sr); err != nil {
 			return
 		}
-		if roundNum, roundStartTime, err = c.roundInfo(height, blockInterval, now, toleratedOvertime); err != nil {
+		if roundNum, roundStartTime, err = c.roundInfo(height, blockInterval, now, toleratedOvertime, nil); err != nil {
 			return
 		}
 		if proposer, err = c.calculateProposer(height, roundNum, proposers); err != nil {

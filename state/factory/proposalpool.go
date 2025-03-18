@@ -119,6 +119,17 @@ func (d *proposalPool) BlockByHash(hash hash.Hash256) *block.Block {
 	return d.blocks[hash]
 }
 
+func (d *proposalPool) BlockByTime(prevHash hash.Hash256, timestamp time.Time) *block.Block {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, b := range d.blocks {
+		if b.PrevHash() == prevHash && b.Timestamp().Equal(timestamp) {
+			return b
+		}
+	}
+	return nil
+}
+
 func (d *proposalPool) Tips() []*block.Block {
 	d.mu.Lock()
 	defer d.mu.Unlock()

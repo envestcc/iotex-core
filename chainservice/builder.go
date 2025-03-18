@@ -501,8 +501,13 @@ func (builder *Builder) buildBlockchain(forSubChain, forTest bool) error {
 			return errors.Wrap(err, "failed to add index builder as subscriber")
 		}
 	}
-	builder.cs.getBlockHashFn = func(height uint64) (hash.Hash256, error) {
-		header, err := builder.cs.Blockchain().BlockHeaderByHeight(height)
+	bc := builder.cs.Blockchain()
+	builder.cs.getBlockHashFn = func(height uint64, fork []byte) (hash.Hash256, error) {
+		fbc, err := bc.Fork(hash.Hash256(fork))
+		if err != nil {
+			return hash.ZeroHash256, err
+		}
+		header, err := fbc.BlockHeaderByHeight(height)
 		if err != nil {
 			return hash.ZeroHash256, err
 		}
@@ -522,7 +527,7 @@ func (builder *Builder) createBlockchain(forSubChain, forTest bool) blockchain.B
 		chainOpts = append(chainOpts, blockchain.BlockValidatorOption(builder.cs.factory))
 	}
 
-	var mintOpts []factory.MintOption
+	mintOpts := []factory.MintOption{factory.WithPrivateKeyOption(builder.cfg.Chain.ProducerPrivateKey())}
 	if builder.cfg.Consensus.Scheme == config.RollDPoSScheme {
 		mintOpts = append(mintOpts, factory.WithTimeoutOption(builder.cfg.Chain.MintTimeout))
 	}
@@ -793,8 +798,18 @@ func (builder *Builder) registerRollDPoSProtocol() error {
 func (builder *Builder) buildBlockTimeCalculator() (err error) {
 	consensusCfg := consensusfsm.NewConsensusConfig(builder.cfg.Consensus.RollDPoS.FSM, builder.cfg.DardanellesUpgrade, builder.cfg.Genesis, builder.cfg.Consensus.RollDPoS.Delay)
 	bc := builder.cs.Blockchain()
-	builder.cs.blockTimeCalculator, err = blockutil.NewBlockTimeCalculator(consensusCfg.BlockInterval, builder.cs.Blockchain().PendingHeight, func(height uint64) (time.Time, error) {
-		blk, err := bc.BlockHeaderByHeight(height)
+	builder.cs.blockTimeCalculator, err = blockutil.NewBlockTimeCalculator(consensusCfg.BlockInterval, func(fork []byte) (uint64, error) {
+		fbc, err := bc.Fork(hash.Hash256(fork))
+		if err != nil {
+			return 0, err
+		}
+		return fbc.TipHeight(), nil
+	}, func(height uint64, fork []byte) (time.Time, error) {
+		fbc, err := bc.Fork(hash.Hash256(fork))
+		if err != nil {
+			return time.Time{}, err
+		}
+		blk, err := fbc.BlockHeaderByHeight(height)
 		if err != nil {
 			return time.Time{}, err
 		}

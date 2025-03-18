@@ -2015,7 +2015,9 @@ func (core *coreService) simulateExecution(
 	}
 	elp.SetNonce(pendingNonce)
 	ctx = evm.WithHelperCtx(ctx, evm.HelperContext{
-		GetBlockHash:   core.dao.GetBlockHash,
+		GetBlockHash: func(u uint64, b []byte) (hash.Hash256, error) {
+			return core.dao.GetBlockHash(u)
+		},
 		GetBlockTime:   core.getBlockTime,
 		DepositGasFunc: rewarding.DepositGas,
 	})

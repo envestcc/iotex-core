@@ -122,7 +122,9 @@ func TestStakingContract(t *testing.T) {
 			}
 
 			ctx = evm.WithHelperCtx(ctx, evm.HelperContext{
-				GetBlockHash:   dao.GetBlockHash,
+				GetBlockHash: func(u uint64, b []byte) (hash.Hash256, error) {
+					return dao.GetBlockHash(u)
+				},
 				GetBlockTime:   fakeGetBlockTime,
 				DepositGasFunc: rewarding.DepositGas,
 			})

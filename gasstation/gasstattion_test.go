@@ -15,6 +15,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/iotexproject/go-pkgs/hash"
+
 	"github.com/iotexproject/iotex-core/v2/action"
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/action/protocol/account"
@@ -93,13 +95,15 @@ func TestSuggestGasPriceForUserAction(t *testing.T) {
 		cfg.Chain,
 		cfg.Genesis,
 		blkMemDao,
-		factory.NewMinter(sf, ap),
+		factory.NewMinter(sf, ap, factory.WithPrivateKeyOption(cfg.Chain.ProducerPrivateKey())),
 		blockchain.BlockValidatorOption(block.NewValidator(
 			sf,
 			protocol.NewGenericValidator(sf, accountutil.AccountState),
 		)),
 	)
-	ep := execution.NewProtocol(blkMemDao.GetBlockHash, rewarding.DepositGas, func(u uint64) (time.Time, error) { return time.Time{}, nil })
+	ep := execution.NewProtocol(func(u uint64, b []byte) (hash.Hash256, error) {
+		return blkMemDao.GetBlockHash(u)
+	}, rewarding.DepositGas, func(u uint64, _ []byte) (time.Time, error) { return time.Time{}, nil })
 	require.NoError(t, ep.Register(registry))
 	rewardingProtocol := rewarding.NewProtocol(cfg.Genesis.Rewarding)
 	require.NoError(t, rewardingProtocol.Register(registry))
@@ -164,13 +168,15 @@ func TestSuggestGasPriceForSystemAction(t *testing.T) {
 		cfg.Chain,
 		cfg.Genesis,
 		blkMemDao,
-		factory.NewMinter(sf, ap),
+		factory.NewMinter(sf, ap, factory.WithPrivateKeyOption(cfg.Chain.ProducerPrivateKey())),
 		blockchain.BlockValidatorOption(block.NewValidator(
 			sf,
 			protocol.NewGenericValidator(sf, accountutil.AccountState),
 		)),
 	)
-	ep := execution.NewProtocol(blkMemDao.GetBlockHash, rewarding.DepositGas, func(u uint64) (time.Time, error) { return time.Time{}, nil })
+	ep := execution.NewProtocol(func(u uint64, b []byte) (hash.Hash256, error) {
+		return blkMemDao.GetBlockHash(u)
+	}, rewarding.DepositGas, func(u uint64, _ []byte) (time.Time, error) { return time.Time{}, nil })
 	require.NoError(t, ep.Register(registry))
 	rewardingProtocol := rewarding.NewProtocol(cfg.Genesis.Rewarding)
 	require.NoError(t, rewardingProtocol.Register(registry))

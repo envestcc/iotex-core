@@ -54,10 +54,10 @@ func TestExecuteContractFailure(t *testing.T) {
 		EvmNetworkID: 100,
 	})
 	ctx = WithHelperCtx(ctx, HelperContext{
-		GetBlockHash: func(uint64) (hash.Hash256, error) {
+		GetBlockHash: func(uint64, []byte) (hash.Hash256, error) {
 			return hash.ZeroHash256, nil
 		},
-		GetBlockTime: func(uint64) (time.Time, error) {
+		GetBlockTime: func(uint64, []byte) (time.Time, error) {
 			return time.Time{}, nil
 		},
 		DepositGasFunc: func(context.Context, protocol.StateManager, *big.Int, ...protocol.DepositOption) ([]*action.TransactionLog, error) {
@@ -273,7 +273,7 @@ func TestConstantinople(t *testing.T) {
 		},
 	}
 	now := time.Now()
-	getBlockTime := func(height uint64) (time.Time, error) {
+	getBlockTime := func(height uint64, _ []byte) (time.Time, error) {
 		return now.Add(time.Duration(height) * time.Second * 5), nil
 	}
 	for _, e := range execHeights {
@@ -281,7 +281,7 @@ func TestConstantinople(t *testing.T) {
 		elp := (&action.EnvelopeBuilder{}).SetNonce(1).SetGasPrice(big.NewInt(10)).
 			SetGasLimit(testutil.TestGasLimit).SetAction(ex).Build()
 
-		timestamp, err := getBlockTime(e.height)
+		timestamp, err := getBlockTime(e.height, nil)
 		require.NoError(err)
 		fCtx := protocol.WithFeatureCtx(protocol.WithBlockCtx(ctx, protocol.BlockCtx{
 			Producer:       identityset.Address(27),
@@ -290,7 +290,7 @@ func TestConstantinople(t *testing.T) {
 			BlockTimeStamp: timestamp,
 		}))
 		fCtx = WithHelperCtx(fCtx, HelperContext{
-			GetBlockHash: func(uint64) (hash.Hash256, error) {
+			GetBlockHash: func(uint64, []byte) (hash.Hash256, error) {
 				return hash.ZeroHash256, nil
 			},
 			GetBlockTime: getBlockTime,

@@ -120,19 +120,19 @@ func TestRoundInfo(t *testing.T) {
 	require.True(roundStartTime.Equal(time.Unix(1562382392, 0)))
 
 	// height is 1 with withToleration true and duration%c.blockInterval < c.toleratedOvertime
-	roundNum, roundStartTime, err = rc.roundInfo(1, time.Second, time.Unix(1562382392, 500000), 501*time.Microsecond)
+	roundNum, roundStartTime, err = rc.roundInfo(1, time.Second, time.Unix(1562382392, 500000), 501*time.Microsecond, nil)
 	require.NoError(err)
 	require.Equal(uint32(19), roundNum)
 	require.True(roundStartTime.Equal(time.Unix(1562382392, 0)))
 
 	// height is 1 with withToleration true and duration%c.blockInterval >= c.toleratedOvertime
-	roundNum, roundStartTime, err = rc.roundInfo(1, time.Second, time.Unix(1562382392, 500000), 500*time.Microsecond)
+	roundNum, roundStartTime, err = rc.roundInfo(1, time.Second, time.Unix(1562382392, 500000), 500*time.Microsecond, nil)
 	require.NoError(err)
 	require.Equal(uint32(20), roundNum)
 	require.True(roundStartTime.After(time.Unix(1562382392, 0)))
 
 	// height is 4 with withToleration true and duration%c.blockInterval >= c.toleratedOvertime
-	roundNum, roundStartTime, err = rc.roundInfo(4, time.Second, time.Unix(1562382392, 500000), 500*time.Microsecond)
+	roundNum, roundStartTime, err = rc.roundInfo(4, time.Second, time.Unix(1562382392, 500000), 500*time.Microsecond, nil)
 	require.NoError(err)
 	require.Equal(uint32(18), roundNum)
 	require.True(roundStartTime.Equal(time.Unix(1562382393, 0)))
@@ -193,7 +193,7 @@ func makeChain(t *testing.T) (blockchain.Blockchain, factory.Factory, actpool.Ac
 		cfg,
 		g,
 		dao,
-		factory.NewMinter(sf, ap),
+		factory.NewMinter(sf, ap, factory.WithPrivateKeyOption(cfg.ProducerPrivateKey())),
 		blockchain.BlockValidatorOption(block.NewValidator(
 			sf,
 			protocol.NewGenericValidator(sf, accountutil.AccountState),

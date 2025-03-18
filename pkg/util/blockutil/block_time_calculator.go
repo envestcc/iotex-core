@@ -15,8 +15,8 @@ type (
 	}
 
 	getBlockIntervalFn    func(uint64) time.Duration
-	getTipHeightFn        func() uint64
-	getHistoryblockTimeFn func(uint64) (time.Time, error)
+	getTipHeightFn        func([]byte) (uint64, error)
+	getHistoryblockTimeFn func(uint64, []byte) (time.Time, error)
 )
 
 // NewBlockTimeCalculator creates a new BlockTimeCalculator.
@@ -40,11 +40,14 @@ func NewBlockTimeCalculator(getBlockInterval getBlockIntervalFn, getTipHeight ge
 // CalculateBlockTime returns the block time of the given height.
 // If the height is in the future, it will predict the block time according to the tip block time and interval.
 // If the height is in the past, it will get the block time from indexer.
-func (btc *BlockTimeCalculator) CalculateBlockTime(height uint64) (time.Time, error) {
+func (btc *BlockTimeCalculator) CalculateBlockTime(height uint64, fork []byte) (time.Time, error) {
 	// get block time from indexer if height is in the past
-	tipHeight := btc.getTipHeight()
+	tipHeight, err := btc.getTipHeight(fork)
+	if err != nil {
+		return time.Time{}, err
+	}
 	if height <= tipHeight {
-		return btc.getHistoryBlockTime(height)
+		return btc.getHistoryBlockTime(height, fork)
 	}
 
 	// predict block time according to tip block time and interval
@@ -53,7 +56,7 @@ func (btc *BlockTimeCalculator) CalculateBlockTime(height uint64) (time.Time, er
 	if blockNumer > math.MaxInt64/blockInterval {
 		return time.Time{}, errors.New("height overflow")
 	}
-	tipBlockTime, err := btc.getHistoryBlockTime(tipHeight)
+	tipBlockTime, err := btc.getHistoryBlockTime(tipHeight, fork)
 	if err != nil {
 		return time.Time{}, err
 	}

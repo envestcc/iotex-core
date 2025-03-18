@@ -12,6 +12,7 @@ import (
 	"github.com/facebookgo/clock"
 	"github.com/iotexproject/go-fsm"
 	"github.com/iotexproject/go-pkgs/crypto"
+	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/iotex-proto/golang/iotextypes"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -49,7 +50,7 @@ type (
 	// ChainManager defines the blockchain interface
 	ChainManager interface {
 		// BlockProposeTime return propose time by height
-		BlockProposeTime(uint64) (time.Time, error)
+		BlockProposeTime(uint64, []byte) (time.Time, error)
 		// BlockCommitTime return commit time by height
 		BlockCommitTime(uint64) (time.Time, error)
 		// MintNewBlock creates a new block with given actions
@@ -104,12 +105,19 @@ func NewChainManager(bc blockchain.Blockchain, sr protocol.StateReader, srFn Sta
 	}
 }
 
-// BlockProposeTime return propose time by height
-func (cm *chainManager) BlockProposeTime(height uint64) (time.Time, error) {
+func (cm *chainManager) BlockProposeTime(height uint64, fork []byte) (time.Time, error) {
 	if height == 0 {
 		return time.Unix(cm.bc.Genesis().Timestamp, 0), nil
 	}
-	header, err := cm.bc.BlockHeaderByHeight(height)
+	bc := blockchain.BlockchainReadOnly(cm.bc)
+	if len(fork) > 0 {
+		fbc, err := cm.bc.Fork(hash.Hash256(fork))
+		if err != nil {
+			return time.Time{}, errors.Wrapf(err, "error when getting fork blockchain")
+		}
+		bc = fbc
+	}
+	header, err := bc.BlockHeaderByHeight(height)
 	if err != nil {
 		return time.Time{}, errors.Wrapf(
 			err, "error when getting the block at height: %d",
@@ -133,9 +141,6 @@ func (cm *chainManager) BlockCommitTime(height uint64) (time.Time, error) {
 
 // MintNewBlock creates a new block with given actions
 func (cm *chainManager) MintNewBlock(height uint64, timestamp time.Time) (*block.Block, error) {
-	if cm.bc.TipHeight() != height-1 {
-		// TODO: mint new block for given height
-	}
 	return cm.bc.MintNewBlock(timestamp)
 }
 

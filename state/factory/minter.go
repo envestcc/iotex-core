@@ -7,10 +7,12 @@ package factory
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/iotexproject/go-pkgs/crypto"
 	"github.com/iotexproject/go-pkgs/hash"
 
 	"github.com/iotexproject/iotex-core/v2/action"
@@ -30,12 +32,20 @@ func WithTimeoutOption(timeout time.Duration) MintOption {
 	}
 }
 
+func WithPrivateKeyOption(sk crypto.PrivateKey) MintOption {
+	return func(m *minter) {
+		m.sk = sk
+	}
+}
+
 type minter struct {
 	f             Factory
 	ap            actpool.ActPool
 	timeout       time.Duration
-	blockPreparer *blockPreparer[*block.Builder]
+	blockPreparer *blockPreparer[*block.Block]
 	proposalPool  *proposalPool
+	sk            crypto.PrivateKey
+	mu            sync.Mutex
 }
 
 // NewMinter creates a wrapper instance
@@ -58,12 +68,29 @@ func (m *minter) Init(root hash.Hash256) {
 
 // NewBlockBuilder implements the BlockMinter interface
 func (m *minter) NewBlockBuilder(ctx context.Context, sign func(action.Envelope) (*action.SealedEnvelope, error)) (*block.Builder, error) {
+	panic("")
+}
+
+func (m *minter) Mint(ctx context.Context) (*block.Block, error) {
+
 	bcCtx := protocol.MustGetBlockchainCtx(ctx)
 	blkCtx := protocol.MustGetBlockCtx(ctx)
-	m.blockPreparer.PrepareBlock(bcCtx.Tip.Hash[:], blkCtx.BlockTimeStamp, func() (*block.Builder, error) {
-		return m.newBlockBuilder(ctx, sign)
+
+	// create a new block
+	blk, err := m.blockPreparer.PrepareOrWait(ctx, bcCtx.Tip.Hash[:], blkCtx.BlockTimeStamp, func() (*block.Block, error) {
+		blk, err := m.mint(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err = m.proposalPool.AddBlock(blk); err != nil {
+			log.L().Error("failed to add block to proposal pool", zap.Error(err))
+		}
+		return blk, nil
 	})
-	return m.blockPreparer.WaitBlock(bcCtx.Tip.Hash[:], blkCtx.BlockTimeStamp)
+	if err != nil {
+		return nil, err
+	}
+	return blk, nil
 }
 
 func (m *minter) AddProposal(blk *block.Block) error {
@@ -82,16 +109,26 @@ func (m *minter) ReceiveBlock(blk *block.Block) error {
 	return nil
 }
 
-func (m *minter) Forks() []*block.Block {
-	return m.proposalPool.Tips()
-}
-
 func (m *minter) Block(hash hash.Hash256) *block.Block {
 	return m.proposalPool.BlockByHash(hash)
 }
 
 func (m *minter) BlockByHeight(height uint64) *block.Block {
 	return m.proposalPool.Block(height)
+}
+
+func (m *minter) mint(ctx context.Context) (*block.Block, error) {
+	builder, err := m.newBlockBuilder(ctx, func(e action.Envelope) (*action.SealedEnvelope, error) {
+		return action.Sign(e, m.sk)
+	})
+	if err != nil {
+		return nil, err
+	}
+	blk, err := builder.SignAndBuild(m.sk)
+	if err != nil {
+		return nil, err
+	}
+	return &blk, nil
 }
 
 func (m *minter) newBlockBuilder(ctx context.Context, sign func(action.Envelope) (*action.SealedEnvelope, error)) (*block.Builder, error) {
