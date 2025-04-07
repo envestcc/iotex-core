@@ -81,11 +81,11 @@ func (adt *adapterWithLog) GetCodeHash(addr common.Address) (ret common.Hash) {
 }
 func (adt *adapterWithLog) GetCode(addr common.Address) (ret []byte) {
 	ret = adt.adapter.GetCode(addr)
-	adt.log("GetCode", zap.String("address", addr.Hex()), zap.String("code", string(ret)))
+	adt.log("GetCode", zap.String("address", addr.Hex()), log.Hex("code", ret))
 	return
 }
 func (adt *adapterWithLog) SetCode(addr common.Address, code []byte) {
-	adt.log("SetCode", zap.String("address", addr.Hex()), zap.String("code", string(code)))
+	adt.log("SetCode", zap.String("address", addr.Hex()), log.Hex("code", code))
 	adt.adapter.SetCode(addr, code)
 }
 func (adt *adapterWithLog) GetCodeSize(addr common.Address) (ret int) {
@@ -109,12 +109,12 @@ func (adt *adapterWithLog) GetRefund() (ret uint64) {
 }
 func (adt *adapterWithLog) GetCommittedState(addr common.Address, h common.Hash) (ret common.Hash) {
 	ret = adt.adapter.GetCommittedState(addr, h)
-	adt.log("GetCommittedState", zap.String("address", addr.Hex()), zap.String("hash", h.Hex()))
+	adt.log("GetCommittedState", zap.String("address", addr.Hex()), zap.String("hash", h.Hex()), zap.String("value", ret.Hex()))
 	return
 }
 func (adt *adapterWithLog) GetState(addr common.Address, h common.Hash) (ret common.Hash) {
 	ret = adt.adapter.GetState(addr, h)
-	adt.log("GetState", zap.String("address", addr.Hex()), zap.String("hash", h.Hex()))
+	adt.log("GetState", zap.String("address", addr.Hex()), zap.String("hash", h.Hex()), zap.String("value", ret.Hex()))
 	return
 }
 func (adt *adapterWithLog) SetState(addr common.Address, k common.Hash, v common.Hash) {
