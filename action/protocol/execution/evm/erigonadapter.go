@@ -184,12 +184,14 @@ func (s *ErigonStateDBAdapter) AddPreimage(k common.Hash, v []byte) {
 }
 
 func (stateDB *ErigonStateDBAdapterDryrun) GetCode(evmAddr common.Address) []byte {
-	return stateDB.intra.GetCode(libcommon.Address(evmAddr))
+	code := stateDB.intra.GetCode(libcommon.Address(evmAddr))
+	log.T(stateDB.ctx).Debug("ErigonStateDBAdapterDryrun Called GetCode.", log.Hex("addrHash", evmAddr[:]), log.Hex("code", code))
+	return code
 }
 
 // GetCodeSize gets the code size saved in hash
 func (stateDB *ErigonStateDBAdapterDryrun) GetCodeSize(evmAddr common.Address) int {
 	code := stateDB.intra.GetCodeSize(libcommon.Address(evmAddr))
-	log.T(stateDB.ctx).Debug("Called GetCodeSize.", log.Hex("addrHash", evmAddr[:]))
+	log.T(stateDB.ctx).Debug("ErigonStateDBAdapterDryrun Called GetCodeSize.", log.Hex("addrHash", evmAddr[:]), zap.Int("codeSize", code))
 	return code
 }
