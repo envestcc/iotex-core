@@ -101,7 +101,6 @@ type (
 func newParams(
 	ctx context.Context,
 	execution action.TxData,
-	stateDB *StateDBAdapter,
 ) (*Params, error) {
 	var (
 		actionCtx    = protocol.MustGetActionCtx(ctx)
@@ -134,7 +133,7 @@ func newParams(
 		}
 	case featureCtx.FixGetHashFnHeight:
 		getHashFn = func(n uint64) common.Hash {
-			hash, err := getBlockHash(stateDB.blockHeight - (n + 1))
+			hash, err := getBlockHash(blkCtx.BlockHeight - (n + 1))
 			if err == nil {
 				return common.BytesToHash(hash[:])
 			}
@@ -142,7 +141,7 @@ func newParams(
 		}
 	default:
 		getHashFn = func(n uint64) common.Hash {
-			hash, err := getBlockHash(stateDB.blockHeight - n)
+			hash, err := getBlockHash(blkCtx.BlockHeight - n)
 			if err != nil {
 				// initial implementation did wrong, should return common.Hash{} in case of error
 				return common.BytesToHash(hash[:])
@@ -237,14 +236,16 @@ func ExecuteContract(
 	ctx, span := tracer.NewSpan(ctx, "evm.ExecuteContract")
 	defer span.End()
 
+	var stateDB StateDB
 	stateDB, err := prepareStateDB(ctx, sm)
 	if err != nil {
 		return nil, nil, err
 	}
-	ps, err := newParams(ctx, execution, stateDB)
+	ps, err := newParams(ctx, execution)
 	if err != nil {
 		return nil, nil, err
 	}
+	stateDB = newAdapterWithLog(stateDB)
 	retval, depositGas, remainingGas, contractAddress, statusCode, err := executeInEVM(ps, stateDB)
 	if err != nil {
 		return nil, nil, err
@@ -430,7 +431,7 @@ func getChainConfig(g genesis.Blockchain, height uint64, id uint32, getBlockTime
 }
 
 // Error in executeInEVM is a consensus issue
-func executeInEVM(evmParams *Params, stateDB *StateDBAdapter) ([]byte, uint64, uint64, string, iotextypes.ReceiptStatus, error) {
+func executeInEVM(evmParams *Params, stateDB StateDB) ([]byte, uint64, uint64, string, iotextypes.ReceiptStatus, error) {
 	var (
 		gasLimit     = evmParams.blkCtx.GasLimit
 		blockHeight  = evmParams.blkCtx.BlockHeight

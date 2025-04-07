@@ -3,6 +3,7 @@ package evm
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 	"go.uber.org/zap"
@@ -10,6 +11,15 @@ import (
 	"github.com/iotexproject/iotex-core/v2/action"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
 )
+
+type StateDB interface {
+	vm.StateDB
+	CommitContracts() error
+	Logs() []*action.Log
+	TransactionLogs() []*action.TransactionLog
+	clear()
+	Error() error
+}
 
 type adapterWithLog struct {
 	adapter    StateDB
