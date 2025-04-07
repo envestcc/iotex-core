@@ -366,7 +366,10 @@ func (stateDB *StateDBAdapter) GetBalance(evmAddr common.Address) *uint256.Int {
 }
 
 // IsNewAccount returns true if this is a new account
-func (stateDB *StateDBAdapter) IsNewAccount(evmAddr common.Address) bool {
+func (stateDB *StateDBAdapter) IsNewAccount(evmAddr common.Address) (ret bool) {
+	defer func() {
+		log.L().Debug("Called IsNewAccount.", zap.String("address", evmAddr.Hex()), zap.Bool("isNewAccount", ret))
+	}()
 	state, err := stateDB.accountState(evmAddr)
 	if stateDB.assertError(err, "Failed to get account.", zap.Error(err), zap.String("address", evmAddr.Hex())) {
 		return false
@@ -376,7 +379,10 @@ func (stateDB *StateDBAdapter) IsNewAccount(evmAddr common.Address) bool {
 }
 
 // GetNonce gets the nonce of account
-func (stateDB *StateDBAdapter) GetNonce(evmAddr common.Address) uint64 {
+func (stateDB *StateDBAdapter) GetNonce(evmAddr common.Address) (ret uint64) {
+	defer func() {
+		log.L().Debug("Called GetNonce.", zap.String("address", evmAddr.Hex()), zap.Uint64("nonce", ret))
+	}()
 	var pendingNonce uint64
 	if stateDB.legacyNonceAccount {
 		pendingNonce = uint64(1)
@@ -459,7 +465,7 @@ func (stateDB *StateDBAdapter) AddRefund(gas uint64) {
 
 // GetRefund gets refund
 func (stateDB *StateDBAdapter) GetRefund() uint64 {
-	log.L().Debug("Called GetRefund.")
+	log.L().Debug("Called GetRefund.", zap.Uint64("refund", stateDB.refund))
 	return stateDB.refund
 }
 
@@ -495,6 +501,7 @@ func (stateDB *StateDBAdapter) SelfDestruct(evmAddr common.Address) {
 // HasSelfDestructed returns whether the contract has been killed
 func (stateDB *StateDBAdapter) HasSelfDestructed(evmAddr common.Address) bool {
 	_, ok := stateDB.selfDestructed[evmAddr]
+	log.L().Debug("Check whether the contract has been killed.", zap.String("address", evmAddr.Hex()), zap.Bool("hasSelfDestructed", ok))
 	return ok
 }
 
@@ -524,17 +531,23 @@ func (stateDB *StateDBAdapter) SetTransientState(addr common.Address, key, value
 }
 
 // GetTransientState gets transient storage for a given account.
-func (stateDB *StateDBAdapter) GetTransientState(addr common.Address, key common.Hash) common.Hash {
+func (stateDB *StateDBAdapter) GetTransientState(addr common.Address, key common.Hash) (ch common.Hash) {
+	defer func() {
+		log.L().Debug("Called GetTransientState.", zap.String("address", addr.Hex()), log.Hex("key", key[:]), log.Hex("value", ch[:]))
+	}()
 	return stateDB.transientStorage.Get(addr, key)
 }
 
 // Exist checks the existence of an address
-func (stateDB *StateDBAdapter) Exist(evmAddr common.Address) bool {
+func (stateDB *StateDBAdapter) Exist(evmAddr common.Address) (ret bool) {
+	defer func() {
+		log.L().Debug("Called Exist.", zap.String("address", evmAddr.Hex()), zap.Bool("exist", ret))
+	}()
 	addr, err := address.FromBytes(evmAddr.Bytes())
 	if stateDB.assertError(err, "Failed to convert evm address.", zap.Error(err)) {
 		return false
 	}
-	log.L().Debug("Check existence.", zap.String("address", addr.String()), log.Hex("addrHash", evmAddr[:]))
+	// log.L().Debug("Check existence.", zap.String("address", addr.String()), log.Hex("addrHash", evmAddr[:]))
 	if _, ok := stateDB.cachedContract[evmAddr]; ok {
 		return true
 	}
@@ -608,8 +621,10 @@ func (stateDB *StateDBAdapter) AddSlotToAccessList(addr common.Address, slot com
 }
 
 // Empty returns true if the the contract is empty
-func (stateDB *StateDBAdapter) Empty(evmAddr common.Address) bool {
-	log.L().Debug("Check whether the contract is empty.")
+func (stateDB *StateDBAdapter) Empty(evmAddr common.Address) (ret bool) {
+	defer func() {
+		log.L().Debug("Check whether the contract is empty.", zap.String("address", evmAddr.Hex()), zap.Bool("isEmpty", ret))
+	}()
 	s, err := stateDB.accountState(evmAddr)
 	if stateDB.assertError(err, "Failed to get account.", zap.Error(err), zap.String("address", evmAddr.Hex())) {
 		return true
@@ -944,7 +959,10 @@ func (stateDB *StateDBAdapter) addTransactionLogs(tlog *action.TransactionLog) {
 //======================================
 
 // GetCodeHash returns contract's code hash
-func (stateDB *StateDBAdapter) GetCodeHash(evmAddr common.Address) common.Hash {
+func (stateDB *StateDBAdapter) GetCodeHash(evmAddr common.Address) (ch common.Hash) {
+	defer func() {
+		log.L().Debug("Called GetCodeHash.", log.Hex("addrHash", evmAddr[:]), log.Hex("codeHash", ch[:]))
+	}()
 	codeHash := common.Hash{}
 	if contract, ok := stateDB.cachedContract[evmAddr]; ok {
 		copy(codeHash[:], contract.SelfState().CodeHash)
@@ -959,7 +977,10 @@ func (stateDB *StateDBAdapter) GetCodeHash(evmAddr common.Address) common.Hash {
 }
 
 // GetCode returns contract's code
-func (stateDB *StateDBAdapter) GetCode(evmAddr common.Address) []byte {
+func (stateDB *StateDBAdapter) GetCode(evmAddr common.Address) (cd []byte) {
+	defer func() {
+		log.L().Debug("Called GetCode.", log.Hex("addrHash", evmAddr[:]), log.Hex("code", cd))
+	}()
 	if contract, ok := stateDB.cachedContract[evmAddr]; ok {
 		code, err := contract.GetCode()
 		if err != nil {
@@ -984,7 +1005,7 @@ func (stateDB *StateDBAdapter) GetCode(evmAddr common.Address) []byte {
 // GetCodeSize gets the code size saved in hash
 func (stateDB *StateDBAdapter) GetCodeSize(evmAddr common.Address) int {
 	code := stateDB.GetCode(evmAddr)
-	log.L().Debug("Called GetCodeSize.", log.Hex("addrHash", evmAddr[:]))
+	log.L().Debug("Called GetCodeSize.", log.Hex("addrHash", evmAddr[:]), zap.Int("codeSize", len(code)))
 	return len(code)
 }
 
@@ -1000,7 +1021,10 @@ func (stateDB *StateDBAdapter) SetCode(evmAddr common.Address, code []byte) {
 }
 
 // GetCommittedState gets committed state
-func (stateDB *StateDBAdapter) GetCommittedState(evmAddr common.Address, k common.Hash) common.Hash {
+func (stateDB *StateDBAdapter) GetCommittedState(evmAddr common.Address, k common.Hash) (ch common.Hash) {
+	defer func() {
+		log.L().Debug("Called GetCommittedState.", log.Hex("addrHash", evmAddr[:]), log.Hex("key", k[:]), log.Hex("value", ch[:]))
+	}()
 	contract, err := stateDB.getContract(evmAddr)
 	if err != nil {
 		log.L().Error("Failed to get contract.", zap.Error(err), zap.String("address", evmAddr.Hex()))
@@ -1017,7 +1041,10 @@ func (stateDB *StateDBAdapter) GetCommittedState(evmAddr common.Address, k commo
 }
 
 // GetState gets state
-func (stateDB *StateDBAdapter) GetState(evmAddr common.Address, k common.Hash) common.Hash {
+func (stateDB *StateDBAdapter) GetState(evmAddr common.Address, k common.Hash) (ch common.Hash) {
+	defer func() {
+		log.L().Debug("Called GetState.", log.Hex("addrHash", evmAddr[:]), log.Hex("key", k[:]), log.Hex("value", ch[:]))
+	}()
 	contract, err := stateDB.getContract(evmAddr)
 	if err != nil {
 		log.L().Error("Failed to get contract.", zap.Error(err), zap.String("address", evmAddr.Hex()))
