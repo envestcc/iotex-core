@@ -26,7 +26,7 @@ func newAdapterWithLog(adapter StateDB) *adapterWithLog {
 
 func (adt *adapterWithLog) log(msg string, fields ...zap.Field) {
 	fields = append(fields, zap.Int("logCounter", adt.logCounter), zap.String("adapter", "adapterWithLog"))
-	log.L().Info(msg, fields...)
+	log.L().Debug(msg, fields...)
 	adt.logCounter++
 }
 

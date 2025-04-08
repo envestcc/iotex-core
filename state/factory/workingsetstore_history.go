@@ -135,7 +135,7 @@ func (store *stateDBWorkingSetStoreWithErigonOutput) Snapshot() int {
 	sn := store.store.Snapshot()
 	isn := store.erigonStore.intraBlockState.Snapshot()
 	store.snMap[sn] = isn
-	log.L().Info("Snapshot Mapping", zap.Int("sn", sn), zap.Int("isn", isn))
+	log.L().Debug("Snapshot Mapping", zap.Int("sn", sn), zap.Int("isn", isn))
 	return sn
 }
 
@@ -144,7 +144,7 @@ func (store *stateDBWorkingSetStoreWithErigonOutput) RevertSnapshot(sn int) erro
 		return err
 	}
 	if isn, ok := store.snMap[sn]; ok {
-		log.L().Info("RevertSnapshot Mapping", zap.Int("sn", sn), zap.Int("isn", isn))
+		log.L().Debug("RevertSnapshot Mapping", zap.Int("sn", sn), zap.Int("isn", isn))
 		store.erigonStore.intraBlockState.RevertToSnapshot(isn)
 		delete(store.snMap, sn)
 	} else {
