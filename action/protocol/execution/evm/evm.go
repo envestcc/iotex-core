@@ -268,6 +268,7 @@ func ExecuteContract(
 			}
 		}
 	}
+	stateDB = newAdapterWithLog(stateDB)
 	retval, depositGas, remainingGas, contractAddress, statusCode, err := executeInEVM(ctx, ps, stateDB)
 	if err != nil {
 		return nil, nil, err
