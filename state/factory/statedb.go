@@ -408,6 +408,7 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 		if err != nil {
 			log.L().Error("Failed to update state.", zap.Error(err))
 			ws.Close()
+			log.S().Panic(err, blk.Height())
 			return err
 		}
 	}
@@ -426,7 +427,9 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 			sdb.currentChainHeight, h,
 		)
 	}
-
+	if blk.Height() >= 5008 {
+		panic("reach 5008")
+	}
 	if err := ws.Commit(ctx); err != nil {
 		return err
 	}

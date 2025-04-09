@@ -7,8 +7,12 @@ package batch
 
 import (
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/iotexproject/iotex-core/v2/pkg/log"
 )
 
 const (
@@ -127,7 +131,7 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 		serialisedBytes = make([][]byte, len(b.writeQueue))
 		wg              = sync.WaitGroup{}
 	)
-
+	lg := log.L().With(zap.String("msg", "SerializeQueue"), zap.Time("time", time.Now()))
 	wg.Add(len(b.writeQueue))
 	for i, wi := range b.writeQueue {
 		go func(i int, info *WriteInfo) {
@@ -143,7 +147,7 @@ func (b *baseKVStoreBatch) SerializeQueue(serialize WriteInfoSerialize, filter W
 			} else {
 				data = info.Serialize()
 			}
-
+			lg.Info("write", zap.String("ns", info.namespace), zap.String("key", string(info.key)), log.Hex("value", info.value))
 			serialisedBytes[idx] = data
 		}(i, wi)
 	}
