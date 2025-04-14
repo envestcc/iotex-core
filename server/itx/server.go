@@ -222,31 +222,6 @@ func (s *Server) Dispatcher() dispatcher.Dispatcher {
 
 // StartServer starts a node server
 func StartServer(ctx context.Context, svr *Server, probeSvr *probe.Server, cfg config.Config) {
-	if err := svr.Start(ctx); err != nil {
-		log.L().Fatal("Failed to start server.", zap.Error(err))
-		return
-	}
-	defer func() {
-		if err := svr.Stop(context.Background()); err != nil {
-			log.L().Panic("Failed to stop server.", zap.Error(err))
-		}
-	}()
-	if err := probeSvr.TurnOn(); err != nil {
-		log.L().Panic("Failed to turn on probe server.", zap.Error(err))
-	}
-
-	if cfg.System.HeartbeatInterval > 0 {
-		task := routine.NewRecurringTask(NewHeartbeatHandler(svr, cfg.Network).Log, cfg.System.HeartbeatInterval)
-		if err := task.Start(ctx); err != nil {
-			log.L().Panic("Failed to start heartbeat routine.", zap.Error(err))
-		}
-		defer func() {
-			if err := task.Stop(ctx); err != nil {
-				log.L().Panic("Failed to stop heartbeat routine.", zap.Error(err))
-			}
-		}()
-	}
-
 	var adminserv http.Server
 	if cfg.System.HTTPAdminPort > 0 {
 		mux := http.NewServeMux()
@@ -276,6 +251,31 @@ func StartServer(ctx context.Context, svr *Server, probeSvr *probe.Server, cfg c
 			}
 			if err := adminserv.Serve(ln); err != nil {
 				log.L().Error("Error when serving performance profiling data.", zap.Error(err))
+			}
+		}()
+	}
+
+	if err := svr.Start(ctx); err != nil {
+		log.L().Fatal("Failed to start server.", zap.Error(err))
+		return
+	}
+	defer func() {
+		if err := svr.Stop(context.Background()); err != nil {
+			log.L().Panic("Failed to stop server.", zap.Error(err))
+		}
+	}()
+	if err := probeSvr.TurnOn(); err != nil {
+		log.L().Panic("Failed to turn on probe server.", zap.Error(err))
+	}
+
+	if cfg.System.HeartbeatInterval > 0 {
+		task := routine.NewRecurringTask(NewHeartbeatHandler(svr, cfg.Network).Log, cfg.System.HeartbeatInterval)
+		if err := task.Start(ctx); err != nil {
+			log.L().Panic("Failed to start heartbeat routine.", zap.Error(err))
+		}
+		defer func() {
+			if err := task.Stop(ctx); err != nil {
+				log.L().Panic("Failed to stop heartbeat routine.", zap.Error(err))
 			}
 		}()
 	}
