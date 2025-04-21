@@ -28,6 +28,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/action/protocol/rewarding"
 	"github.com/iotexproject/iotex-core/v2/api"
 	"github.com/iotexproject/iotex-core/v2/blockchain"
+	"github.com/iotexproject/iotex-core/v2/blockchain/block"
 	"github.com/iotexproject/iotex-core/v2/blockchain/genesis"
 	"github.com/iotexproject/iotex-core/v2/config"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
@@ -81,9 +82,21 @@ func TestBlockReward(t *testing.T) {
 	cfg.Consensus.RollDPoS.FSM.AcceptProposalEndorsementTTL = 300 * time.Millisecond
 	cfg.Consensus.RollDPoS.FSM.AcceptLockEndorsementTTL = 300 * time.Millisecond
 	cfg.Consensus.RollDPoS.FSM.CommitTTL = 100 * time.Millisecond
+	cfg.DardanellesUpgrade.AcceptBlockTTL = 300 * time.Millisecond
+	cfg.DardanellesUpgrade.AcceptProposalEndorsementTTL = 300 * time.Millisecond
+	cfg.DardanellesUpgrade.AcceptLockEndorsementTTL = 300 * time.Millisecond
+	cfg.DardanellesUpgrade.CommitTTL = 100 * time.Millisecond
+	cfg.DardanellesUpgrade.BlockInterval = time.Second
 	cfg.Chain.ProducerPrivKey = identityset.PrivateKey(0).HexString()
 	cfg.Network.Port = testutil.RandomPort()
 	cfg.Genesis.PollMode = "lifeLong"
+	cfg.Genesis.AleutianBlockHeight = 0
+	cfg.Genesis.DardanellesBlockHeight = 1
+	cfg.Genesis.GreenlandBlockHeight = 6
+	cfg.Genesis.KamchatkaBlockHeight = 7
+	cfg.Genesis.ToBeEnabledBlockHeight = 8 // enable wake block reward
+	testutil.NormalizeGenesisHeights(&cfg.Genesis.Blockchain)
+	block.LoadGenesisHash(&cfg.Genesis)
 
 	svr, err := itx.NewServer(cfg)
 	require.NoError(t, err)
@@ -120,19 +133,49 @@ func TestBlockReward(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, balance.Cmp(big.NewInt(0).Mul(blockReward, big.NewInt(5))) <= 0)
 
-	for i := 1; i <= 5; i++ {
-		blk, err := svr.ChainService(1).BlockDAO().GetBlockByHeight(uint64(i))
+	checkBlockReward := func(blockHeight uint64, expectedReward *big.Int) {
+		blk, err := svr.ChainService(1).BlockDAO().GetBlockByHeight(uint64(blockHeight))
 		require.NoError(t, err)
 		ok := false
-		var gr *action.GrantReward
-		for _, act := range blk.Body.Actions {
+		var (
+			gr  *action.GrantReward
+			idx int
+		)
+		for k, act := range blk.Body.Actions {
 			gr, ok = act.Action().(*action.GrantReward)
 			if ok {
-				assert.Equal(t, uint64(i), gr.Height())
+				idx = k
+				require.NoError(t, err)
+				assert.Equal(t, uint64(blockHeight), gr.Height())
 				break
 			}
 		}
 		assert.True(t, ok)
+		receipts, err := svr.ChainService(1).BlockDAO().GetReceipts(uint64(blockHeight))
+		require.NoError(t, err)
+		require.Len(t, receipts[idx].Logs(), 1)
+		rewardLogs, err := rewarding.UnmarshalRewardLog(receipts[idx].Logs()[0].Data)
+		require.NoError(t, err)
+
+		total := big.NewInt(0)
+		for _, txLog := range rewardLogs.Logs {
+			amount, ok := big.NewInt(0).SetString(txLog.Amount, 10)
+			require.True(t, ok)
+			total.Add(total, amount)
+		}
+		assert.Equal(t, expectedReward.String(), total.String(), "block height %d", blockHeight)
+	}
+
+	for i := 1; i <= 5; i++ {
+		checkBlockReward(uint64(i), cfg.Genesis.DardanellesBlockReward())
+	}
+
+	require.NoError(t, testutil.WaitUntil(100*time.Millisecond, 20*time.Second, func() (b bool, e error) {
+		return svr.ChainService(1).Blockchain().TipHeight() >= 10, nil
+	}))
+	// check block reward
+	for i := 6; i <= 10; i++ {
+		checkBlockReward(uint64(i), cfg.Genesis.WakeBlockReward())
 	}
 }
 
