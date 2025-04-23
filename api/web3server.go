@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/iotexproject/go-pkgs/crypto"
 	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/go-pkgs/util"
@@ -438,13 +439,25 @@ func (svr *web3Handler) getTransactionCount(in *gjson.Result) (interface{}, erro
 	if !addr.Exists() {
 		return nil, errInvalidFormat
 	}
+	var bn = rpc.LatestBlockNumber
+	if bnParam := in.Get("params.1"); bnParam.Exists() {
+		if err := bn.UnmarshalJSON([]byte(bnParam.String())); err != nil {
+			return nil, errors.Wrapf(err, "failed to unmarshal height %s", bnParam.String())
+		}
+	}
 	ioAddr, err := ethAddrToIoAddr(addr.String())
 	if err != nil {
 		return nil, err
 	}
-	// TODO (liuhaai): returns the nonce in given block height after archive mode is supported
-	// blkNum, err := getStringFromArray(in, 1)
-	pendingNonce, err := svr.coreService.PendingNonce(ioAddr)
+	var (
+		pendingNonce    uint64
+		height, archive = blockNumberToHeight(bn)
+	)
+	if !archive {
+		pendingNonce, err = svr.coreService.PendingNonce(ioAddr)
+	} else {
+		pendingNonce, err = svr.coreService.WithHeight(height).PendingNonce(ioAddr)
+	}
 	if err != nil {
 		return nil, err
 	}

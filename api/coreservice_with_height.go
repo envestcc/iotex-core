@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/iotexproject/iotex-core/v2/action"
+	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	accountutil "github.com/iotexproject/iotex-core/v2/action/protocol/account/util"
 	"github.com/iotexproject/iotex-core/v2/blockchain/genesis"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
@@ -23,6 +24,7 @@ type (
 	CoreServiceReaderWithHeight interface {
 		Account(address.Address) (*iotextypes.AccountMeta, *iotextypes.BlockIdentifier, error)
 		ReadContract(context.Context, address.Address, action.Envelope) (string, *iotextypes.Receipt, error)
+		PendingNonce(address.Address) (uint64, error)
 	}
 
 	coreServiceReaderWithHeight struct {
@@ -106,4 +108,30 @@ func (core *coreServiceReaderWithHeight) ReadContract(ctx context.Context, calle
 		key     = hash.Hash160b(append(hdBytes, exec.Data()...))
 	)
 	return core.cs.readContract(ctx, key, core.height, true, callerAddr, elp)
+}
+
+func (core *coreServiceReaderWithHeight) PendingNonce(addr address.Address) (uint64, error) {
+	if !core.cs.archiveSupported {
+		return 0, ErrArchiveNotSupported
+	}
+	log.Logger("api").Debug("receive pending nonce request")
+	height := core.height
+	ctx, err := core.cs.bc.ContextAtHeight(context.Background(), height)
+	if err != nil {
+		return 0, status.Error(codes.Internal, err.Error())
+	}
+	ctx = protocol.WithFeatureCtx(protocol.WithBlockCtx(ctx, protocol.BlockCtx{BlockHeight: height}))
+	ws, err := core.cs.sf.WorkingSetAtHeight(ctx, height)
+	if err != nil {
+		return 0, status.Error(codes.Internal, err.Error())
+	}
+	defer ws.Close()
+	confirmedState, err := accountutil.AccountState(ctx, ws, addr)
+	if err != nil {
+		return 0, status.Error(codes.Internal, err.Error())
+	}
+	if protocol.MustGetFeatureCtx(ctx).UseZeroNonceForFreshAccount {
+		return confirmedState.PendingNonceConsideringFreshAccount(), nil
+	}
+	return confirmedState.PendingNonce(), nil
 }
