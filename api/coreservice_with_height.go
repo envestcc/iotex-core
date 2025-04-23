@@ -48,11 +48,25 @@ func (core *coreServiceReaderWithHeight) Account(addr address.Address) (*iotexty
 	if addrStr == address.RewardingPoolAddr || addrStr == address.StakingBucketPoolAddr {
 		return core.cs.getProtocolAccount(ctx, addrStr)
 	}
-	state, pendingNonce, err := core.stateAndNonce(addr)
+
+	g := core.cs.bc.Genesis()
+	ctx = genesis.WithGenesisContext(ctx, g)
+	ws, err := core.cs.sf.WorkingSetAtHeight(ctx, core.height)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, status.Error(codes.Internal, err.Error())
 	}
-	return core.cs.acccount(ctx, core.height, state, pendingNonce, addr)
+	defer ws.Close()
+	state, err := accountutil.AccountState(ctx, ws, addr)
+	if err != nil {
+		return nil, nil, status.Error(codes.NotFound, err.Error())
+	}
+	var pendingNonce uint64
+	if g.IsSumatra(core.height) {
+		pendingNonce = state.PendingNonceConsideringFreshAccount()
+	} else {
+		pendingNonce = state.PendingNonce()
+	}
+	return core.cs.acccount(ctx, ws, state, pendingNonce, addr)
 }
 
 func (core *coreServiceReaderWithHeight) stateAndNonce(addr address.Address) (*state.Account, uint64, error) {

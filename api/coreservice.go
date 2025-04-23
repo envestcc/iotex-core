@@ -326,7 +326,7 @@ func (core *coreService) Account(addr address.Address) (*iotextypes.AccountMeta,
 	}
 	span.AddEvent("accountutil.AccountStateWithHeight")
 	ctx = genesis.WithGenesisContext(ctx, core.bc.Genesis())
-	state, tipHeight, err := accountutil.AccountStateWithHeight(ctx, core.sf, addr)
+	state, _, err := accountutil.AccountStateWithHeight(ctx, core.sf, addr)
 	if err != nil {
 		return nil, nil, status.Error(codes.NotFound, err.Error())
 	}
@@ -335,10 +335,10 @@ func (core *coreService) Account(addr address.Address) (*iotextypes.AccountMeta,
 	if err != nil {
 		return nil, nil, status.Error(codes.Internal, err.Error())
 	}
-	return core.acccount(ctx, tipHeight, state, pendingNonce, addr)
+	return core.acccount(ctx, core.sf, state, pendingNonce, addr)
 }
 
-func (core *coreService) acccount(ctx context.Context, height uint64, state *state.Account, pendingNonce uint64, addr address.Address) (*iotextypes.AccountMeta, *iotextypes.BlockIdentifier, error) {
+func (core *coreService) acccount(ctx context.Context, sr protocol.StateReader, state *state.Account, pendingNonce uint64, addr address.Address) (*iotextypes.AccountMeta, *iotextypes.BlockIdentifier, error) {
 	if core.indexer == nil {
 		return nil, nil, status.Error(codes.NotFound, blockindex.ErrActionIndexNA.Error())
 	}
@@ -358,13 +358,17 @@ func (core *coreService) acccount(ctx context.Context, height uint64, state *sta
 	}
 	if state.IsContract() {
 		var code protocol.SerializableBytes
-		_, err = core.sf.State(&code, protocol.NamespaceOption(evm.CodeKVNameSpace), protocol.KeyOption(state.CodeHash))
+		_, err = sr.State(&code, protocol.NamespaceOption(evm.CodeKVNameSpace), protocol.KeyOption(state.CodeHash))
 		if err != nil {
 			return nil, nil, status.Error(codes.NotFound, err.Error())
 		}
 		accountMeta.ContractByteCode = code
 	}
 	span.AddEvent("bc.BlockHeaderByHeight")
+	height, err := sr.Height()
+	if err != nil {
+		return nil, nil, status.Error(codes.NotFound, err.Error())
+	}
 	header, err := core.bc.BlockHeaderByHeight(height)
 	if err != nil {
 		return nil, nil, status.Error(codes.NotFound, err.Error())
