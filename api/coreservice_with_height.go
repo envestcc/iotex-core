@@ -64,6 +64,7 @@ func (core *coreServiceReaderWithHeight) stateAndNonce(addr address.Address) (*s
 	if err != nil {
 		return nil, 0, status.Error(codes.Internal, err.Error())
 	}
+	defer ws.Close()
 	state, err := accountutil.AccountState(ctx, ws, addr)
 	if err != nil {
 		return nil, 0, status.Error(codes.NotFound, err.Error())

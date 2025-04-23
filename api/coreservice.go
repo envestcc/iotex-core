@@ -982,6 +982,7 @@ func (core *coreService) readState(ctx context.Context, p protocol.Protocol, hei
 			if err != nil {
 				return nil, 0, err
 			}
+			defer historySR.Close()
 			d, h, err := p.ReadState(ctx, historySR, methodName, arguments...)
 			if err == nil {
 				key.Height = strconv.FormatUint(h, 10)
@@ -1992,6 +1993,7 @@ func (core *coreService) simulateExecution(
 			return nil, nil, status.Error(codes.Internal, err.Error())
 		}
 		ws, err = core.sf.WorkingSetAtHeight(ctx, height)
+		defer ws.(protocol.StateManagerWithCloser).Close()
 	} else {
 		ctx, err = core.bc.Context(ctx)
 		if err != nil {
