@@ -82,7 +82,7 @@ func verifyERC20(contract address.Address) error {
 	minH = max(minH, rev)
 	state := make(map[string]*big.Int)
 	for start := minH; start <= maxH; start += batch {
-		end := start + batch
+		end := min(start+batch, maxH)
 		var (
 			cases      []*erc20Case
 			err        error
@@ -238,8 +238,16 @@ func fetchERC20DeltaCases(db *gorm.DB, contract address.Address, from, to uint64
 		addrMap[r.Recipient].Add(addrMap[r.Recipient], amount)
 	}
 	cases = append(cases, genCasesAt(lastHeight, addrMap)...)
+	// filter out zero addresses
+	casesFiltered := make([]*erc20Case, 0, len(cases))
+	for _, c := range cases {
+		if c.addr.String() == address.ZeroAddress {
+			continue
+		}
+		casesFiltered = append(casesFiltered, c)
+	}
 	fmt.Printf("generated %d erc20 cases from %d to %d\n", len(cases), from, to)
-	return cases, nil
+	return casesFiltered, nil
 }
 
 func verifyOne(c *erc20Case) (*mismatch, error) {

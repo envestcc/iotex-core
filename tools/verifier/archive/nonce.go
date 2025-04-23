@@ -48,7 +48,7 @@ func verifyNonce(cmd *cobra.Command, args []string) error {
 	fmt.Printf("recover nonce progress start from %d\n", rev)
 	minH = max(minH, rev)
 	for start := minH; start <= maxH; start += batch {
-		end := start + batch
+		end := min(start+batch, maxH)
 
 		cases, err := fetchNonceCases(db, start, end)
 		if err != nil {

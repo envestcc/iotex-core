@@ -50,7 +50,7 @@ func verifyToken(cmd *cobra.Command, args []string) error {
 	minH = max(minH, rev)
 	state := make(map[string]*big.Int)
 	for start := minH; start <= maxH; start += batch {
-		end := start + batch
+		end := min(start+batch, maxH)
 		var (
 			cases      []*tokenCase
 			err        error
