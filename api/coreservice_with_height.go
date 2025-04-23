@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/iotex-address/address"
@@ -12,7 +13,9 @@ import (
 	"github.com/iotexproject/iotex-core/v2/action"
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	accountutil "github.com/iotexproject/iotex-core/v2/action/protocol/account/util"
+	"github.com/iotexproject/iotex-core/v2/action/protocol/execution/evm"
 	"github.com/iotexproject/iotex-core/v2/blockchain/genesis"
+	"github.com/iotexproject/iotex-core/v2/blockindex"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/pkg/tracer"
 	"github.com/iotexproject/iotex-core/v2/pkg/util/byteutil"
@@ -68,30 +71,7 @@ func (core *coreServiceReaderWithHeight) Account(addr address.Address) (*iotexty
 	} else {
 		pendingNonce = state.PendingNonce()
 	}
-	return core.cs.acccount(ctx, ws, state, pendingNonce, addr)
-}
-
-func (core *coreServiceReaderWithHeight) stateAndNonce(addr address.Address) (*state.Account, uint64, error) {
-	var (
-		g   = core.cs.bc.Genesis()
-		ctx = genesis.WithGenesisContext(context.Background(), g)
-	)
-	ws, err := core.cs.sf.WorkingSetAtHeight(ctx, core.height)
-	if err != nil {
-		return nil, 0, status.Error(codes.Internal, err.Error())
-	}
-	defer ws.Close()
-	state, err := accountutil.AccountState(ctx, ws, addr)
-	if err != nil {
-		return nil, 0, status.Error(codes.NotFound, err.Error())
-	}
-	var pendingNonce uint64
-	if g.IsSumatra(core.height) {
-		pendingNonce = state.PendingNonceConsideringFreshAccount()
-	} else {
-		pendingNonce = state.PendingNonce()
-	}
-	return state, pendingNonce, nil
+	return core.acccount(ctx, ws, state, pendingNonce, addr)
 }
 
 func (core *coreServiceReaderWithHeight) ReadContract(ctx context.Context, callerAddr address.Address, elp action.Envelope) (string, *iotextypes.Receipt, error) {
@@ -134,4 +114,47 @@ func (core *coreServiceReaderWithHeight) PendingNonce(addr address.Address) (uin
 		return confirmedState.PendingNonceConsideringFreshAccount(), nil
 	}
 	return confirmedState.PendingNonce(), nil
+}
+
+func (core *coreServiceReaderWithHeight) acccount(ctx context.Context, sr protocol.StateReader, state *state.Account, pendingNonce uint64, addr address.Address) (*iotextypes.AccountMeta, *iotextypes.BlockIdentifier, error) {
+	if core.cs.indexer == nil {
+		return nil, nil, status.Error(codes.NotFound, blockindex.ErrActionIndexNA.Error())
+	}
+	span := tracer.SpanFromContext(ctx)
+	span.AddEvent("indexer.GetActionCount")
+	numActions, err := core.cs.indexer.GetActionCountByAddress(hash.BytesToHash160(addr.Bytes()))
+	if err != nil {
+		return nil, nil, status.Error(codes.NotFound, err.Error())
+	}
+	// TODO: deprecate nonce field in account meta
+	accountMeta := &iotextypes.AccountMeta{
+		Address:      addr.String(),
+		Balance:      state.Balance.String(),
+		PendingNonce: pendingNonce,
+		NumActions:   numActions,
+		IsContract:   state.IsContract(),
+	}
+	if state.IsContract() {
+		var code protocol.SerializableBytes
+		_, err = sr.State(&code, protocol.NamespaceOption(evm.CodeKVNameSpace), protocol.KeyOption(addr.Bytes()))
+		if err != nil {
+			return nil, nil, status.Error(codes.NotFound, err.Error())
+		}
+		accountMeta.ContractByteCode = code
+	}
+	span.AddEvent("bc.BlockHeaderByHeight")
+	height, err := sr.Height()
+	if err != nil {
+		return nil, nil, status.Error(codes.NotFound, err.Error())
+	}
+	header, err := core.cs.bc.BlockHeaderByHeight(height)
+	if err != nil {
+		return nil, nil, status.Error(codes.NotFound, err.Error())
+	}
+	hash := header.HashBlock()
+	span.AddEvent("coreService.Account.End")
+	return accountMeta, &iotextypes.BlockIdentifier{
+		Hash:   hex.EncodeToString(hash[:]),
+		Height: height,
+	}, nil
 }
