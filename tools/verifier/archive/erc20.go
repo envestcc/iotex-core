@@ -390,9 +390,9 @@ func verifyOneDelta(c *erc20Case) (*mismatch, error) {
 	if err := errWG.Wait(); err != nil {
 		return nil, errors.Wrap(err, "failed to call contract")
 	}
-	deltaLegacy := new(big.Int).Sub(balanceLegacy, prevBalanceLegacy)
 	delta := new(big.Int).Sub(balance, prevBalance)
 	if ethcliLegacy != nil {
+		deltaLegacy := new(big.Int).Sub(balanceLegacy, prevBalanceLegacy)
 		if deltaLegacy.String() != c.balanceDelta || delta.String() != c.balanceDelta {
 			return &mismatch{
 				height:         c.height,

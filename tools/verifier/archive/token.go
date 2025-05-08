@@ -328,8 +328,8 @@ func verifyOneTokenDelta(c *tokenCase) (*mismatch, error) {
 		return nil, errors.Wrap(err, "failed to call contract")
 	}
 	delta := new(big.Int).Sub(balance, prevBalance)
-	deltaLegacy := new(big.Int).Sub(balanceLegacy, prevBalanceLegacy)
 	if ethcliLegacy != nil {
+		deltaLegacy := new(big.Int).Sub(balanceLegacy, prevBalanceLegacy)
 		if deltaLegacy.String() != c.balanceDelta || delta.String() != c.balanceDelta {
 			return &mismatch{
 				height:         c.height,
