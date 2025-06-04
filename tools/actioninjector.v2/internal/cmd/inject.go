@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -152,7 +153,7 @@ func newInjectionProcessor() (*injectProcessor, error) {
 	rawInjectCfg.chainID = resp.ChainMeta.ChainID
 	log.L().Info("set chainID", zap.Uint32("chainID", rawInjectCfg.chainID))
 	p.api = api
-	p.randAccounts(rawInjectCfg.randAccounts)
+	p.randAccounts(rawInjectCfg.randAccounts, rawInjectCfg.accountOffset)
 	loadValue, _ := new(big.Int).SetString(rawInjectCfg.loadTokenAmount, 10)
 	if loadValue.BitLen() != 0 {
 		if err := p.loadAccounts(rawInjectCfg.configPath, loadValue); err != nil {
@@ -165,10 +166,10 @@ func newInjectionProcessor() (*injectProcessor, error) {
 	return p, nil
 }
 
-func (p *injectProcessor) randAccounts(num int) error {
+func (p *injectProcessor) randAccounts(num, offset int) error {
 	addrKeys := make([]*util.AddressKey, 0, num)
 	for i := 0; i < num; i++ {
-		s := hash.Hash256b([]byte{byte(i), byte(100)})
+		s := generateKeyUint32(uint32(i + offset))
 		private, err := crypto.BytesToPrivateKey(s[:])
 		if err != nil {
 			return err
@@ -709,6 +710,7 @@ var rawInjectCfg = struct {
 	evmChainID    uint32
 
 	randAccounts    int
+	accountOffset   int
 	loadTokenAmount string
 }{}
 
@@ -739,8 +741,15 @@ func init() {
 	flag.DurationVar(&rawInjectCfg.resetInterval, "reset-interval", 10*time.Second, "time interval to reset nonce counter")
 	flag.IntVar(&rawInjectCfg.aps, "aps", 200, "actions to be injected per second")
 	flag.IntVar(&rawInjectCfg.randAccounts, "rand-accounts", 20, "number of accounst to use")
+	flag.IntVar(&rawInjectCfg.accountOffset, "account-offset", 0, "offset of accounts to use")
 	flag.BoolVar(&rawInjectCfg.insecure, "insecure", false, "insecure network")
 	flag.BoolVar(&rawInjectCfg.checkReceipt, "check-recipt", false, "check recept")
 	flag.StringVar(&rawInjectCfg.loadTokenAmount, "load-token-amount", "5000000000000000000", "init load how much token to inject accounts")
 	rootCmd.AddCommand(injectCmd)
+}
+
+func generateKeyUint32(n uint32) hash.Hash256 {
+	bs := make([]byte, 4)
+	binary.BigEndian.PutUint32(bs, uint32(n))
+	return hash.Hash256b(append(bs, byte(100)))
 }
