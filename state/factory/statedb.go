@@ -59,7 +59,7 @@ type (
 		ps                       *patchStore
 
 		// erigon
-		rw           kv.RwDB
+		rw           RWDB
 		getBlockTime func(uint64) (time.Time, error)
 	}
 )
@@ -155,7 +155,7 @@ func (sdb *stateDB) Start(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to open history state index")
 		}
-		sdb.rw = rw
+		sdb.rw = NewRWDBW(rw)
 	}
 	// check factory height
 	h, err := sdb.dao.getHeight()
