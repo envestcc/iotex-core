@@ -32,7 +32,7 @@ type StateDB interface {
 type ErigonStateDBAdapter struct {
 	*StateDBAdapter
 	rw         erigonstate.StateWriter
-	intra      *erigonstate.IntraBlockState
+	intra      ErigonIntraBlockState
 	chainRules *erigonchain.Rules
 	snDiff     int
 }
@@ -43,7 +43,7 @@ type ErigonStateDBAdapterDryrun struct {
 
 func NewErigonStateDBAdapter(adapter *StateDBAdapter,
 	rw erigonstate.StateWriter,
-	intra *erigonstate.IntraBlockState,
+	intra ErigonIntraBlockState,
 	chainRules *erigonchain.Rules,
 ) *ErigonStateDBAdapter {
 	adapter.newContract = func(addr hash.Hash160, account *state.Account) (Contract, error) {
@@ -59,7 +59,7 @@ func NewErigonStateDBAdapter(adapter *StateDBAdapter,
 
 func NewErigonStateDBAdapterDryrun(adapter *StateDBAdapter,
 	rw erigonstate.StateWriter,
-	intra *erigonstate.IntraBlockState,
+	intra ErigonIntraBlockState,
 	chainRules *erigonchain.Rules,
 ) *ErigonStateDBAdapterDryrun {
 	a := NewErigonStateDBAdapter(adapter, rw, intra, chainRules)

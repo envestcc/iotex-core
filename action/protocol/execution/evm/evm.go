@@ -268,7 +268,7 @@ func ExecuteContract(
 		return nil, nil, err
 	}
 	if erigonsm, ok := sm.(interface {
-		Erigon() (erigonstate.StateWriter, *erigonstate.IntraBlockState, bool)
+		Erigon() (erigonstate.StateWriter, ErigonIntraBlockState, bool)
 	}); ok {
 		if sw, in, dryrun := erigonsm.Erigon(); sw != nil && in != nil {
 			rules := ps.chainConfig.Rules(ps.context.BlockNumber, ps.genesis.IsSumatra(uint64(ps.context.BlockNumber.Int64())), ps.context.Time)

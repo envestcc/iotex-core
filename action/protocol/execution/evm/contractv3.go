@@ -2,7 +2,6 @@ package evm
 
 import (
 	"github.com/iotexproject/go-pkgs/hash"
-	erigonstate "github.com/ledgerwatch/erigon/core/state"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -26,7 +25,7 @@ type contractV3 struct {
 	v2 *contractV2
 }
 
-func newContractV3(addr hash.Hash160, account *state.Account, sm protocol.StateManager, intra *erigonstate.IntraBlockState, enableAsync bool) (Contract, error) {
+func newContractV3(addr hash.Hash160, account *state.Account, sm protocol.StateManager, intra ErigonIntraBlockState, enableAsync bool) (Contract, error) {
 	v1, err := newContract(addr, account, sm, enableAsync)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create contract")

@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 	"github.com/ledgerwatch/erigon/core/state"
+	erigonstate "github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"go.uber.org/zap"
 
@@ -26,7 +27,7 @@ type (
 		AddAddressToAccessList(addr libcommon.Address) (addrMod bool)
 		AddSlotToAccessList(addr libcommon.Address, slot libcommon.Hash) (addrMod, slotMod bool)
 		Prepare(rules *chain.Rules, sender, coinbase libcommon.Address, dst *libcommon.Address,
-			precompiles []libcommon.Address, list types2.AccessList, authorities []libcommon.Address)
+			precompiles []libcommon.Address, list types2.AccessList)
 		GetCode(addr libcommon.Address) []byte
 		GetCodeSize(addr libcommon.Address) int
 		GetCodeHash(addr libcommon.Address) libcommon.Hash
@@ -44,6 +45,7 @@ type (
 		Exist(addr libcommon.Address) bool
 		SetBalance(addr libcommon.Address, amount *uint256.Int)
 		SetNonce(addr libcommon.Address, nonce uint64)
+		Print(chainRules chain.Rules)
 	}
 
 	RWDB interface {
@@ -68,7 +70,7 @@ type (
 	}
 
 	intraBlockStateW struct {
-		e ErigonIntraBlockState
+		e *erigonstate.IntraBlockState
 		l *zap.Logger
 	}
 
@@ -144,7 +146,7 @@ func (tx *rotxW) Rollback() {
 	tx.Tx.Rollback()
 }
 
-func NewIntraBlockStateW(ibs ErigonIntraBlockState) ErigonIntraBlockState {
+func NewIntraBlockStateW(ibs *erigonstate.IntraBlockState) ErigonIntraBlockState {
 	return &intraBlockStateW{
 		e: ibs,
 		l: log.L().With(zap.String("topic", "erigon"), zap.String("comp", "intrablockstate")),
@@ -189,13 +191,13 @@ func (ibs *intraBlockStateW) AddSlotToAccessList(addr libcommon.Address, slot li
 }
 
 func (ibs *intraBlockStateW) Prepare(rules *chain.Rules, sender, coinbase libcommon.Address, dst *libcommon.Address,
-	precompiles []libcommon.Address, list types2.AccessList, authorities []libcommon.Address) {
+	precompiles []libcommon.Address, list types2.AccessList) {
 	ibs.l.Debug("preparing intra-block state",
 		zap.String("sender", sender.Hex()),
 		zap.String("coinbase", coinbase.Hex()),
 		zap.String("destination", dst.Hex()),
 	)
-	ibs.e.Prepare(rules, sender, coinbase, dst, precompiles, list, authorities)
+	ibs.e.Prepare(rules, sender, coinbase, dst, precompiles, list)
 }
 
 func (ibs *intraBlockStateW) GetCode(addr libcommon.Address) []byte {
@@ -271,6 +273,11 @@ func (ibs *intraBlockStateW) SetBalance(addr libcommon.Address, amount *uint256.
 func (ibs *intraBlockStateW) SetNonce(addr libcommon.Address, nonce uint64) {
 	ibs.l.Debug("setting nonce for address", zap.String("address", addr.Hex()), zap.Uint64("nonce", nonce))
 	ibs.e.SetNonce(addr, nonce)
+}
+
+func (ibs *intraBlockStateW) Print(chainRules chain.Rules) {
+	ibs.l.Debug("printing intra-block state")
+	ibs.e.Print(chainRules)
 }
 
 func NewStateWriterWithChangeSetsW(w state.WriterWithChangeSets) state.WriterWithChangeSets {

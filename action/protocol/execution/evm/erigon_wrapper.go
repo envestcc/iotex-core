@@ -17,7 +17,7 @@ type (
 		AddAddressToAccessList(addr libcommon.Address) (addrMod bool)
 		AddSlotToAccessList(addr libcommon.Address, slot libcommon.Hash) (addrMod, slotMod bool)
 		Prepare(rules *chain.Rules, sender, coinbase libcommon.Address, dst *libcommon.Address,
-			precompiles []libcommon.Address, list types2.AccessList, authorities []libcommon.Address)
+			precompiles []libcommon.Address, list types2.AccessList)
 		GetCode(addr libcommon.Address) []byte
 		GetCodeSize(addr libcommon.Address) int
 		GetCodeHash(addr libcommon.Address) libcommon.Hash
@@ -27,5 +27,6 @@ type (
 		SetCode(addr libcommon.Address, code []byte)
 		GetNonce(addr libcommon.Address) uint64
 		GetBalance(addr libcommon.Address) *uint256.Int
+		SetNonce(addr libcommon.Address, nonce uint64)
 	}
 )

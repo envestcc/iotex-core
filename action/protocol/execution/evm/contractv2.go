@@ -6,7 +6,6 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/iotexproject/go-pkgs/hash"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	erigonstate "github.com/ledgerwatch/erigon/core/state"
 	"github.com/pkg/errors"
 
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
@@ -18,11 +17,11 @@ import (
 type contractV2 struct {
 	*state.Account
 	sm    protocol.StateReader
-	intra *erigonstate.IntraBlockState
+	intra ErigonIntraBlockState
 	addr  hash.Hash160
 }
 
-func newContractV2(addr hash.Hash160, account *state.Account, sm protocol.StateReader, intra *erigonstate.IntraBlockState) (Contract, error) {
+func newContractV2(addr hash.Hash160, account *state.Account, sm protocol.StateReader, intra ErigonIntraBlockState) (Contract, error) {
 	c := &contractV2{
 		Account: account,
 		sm:      sm,

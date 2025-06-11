@@ -61,7 +61,7 @@ type stateDBWorkingSetStoreWithErigonOutput struct {
 
 type erigonStore struct {
 	tsw             erigonstate.StateWriter
-	intraBlockState *erigonstate.IntraBlockState
+	intraBlockState ErigonIntraBlockState
 	tx              kv.Tx
 	getBlockTime    func(uint64) (time.Time, error)
 }

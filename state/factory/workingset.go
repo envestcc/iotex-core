@@ -26,6 +26,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/action"
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	accountutil "github.com/iotexproject/iotex-core/v2/action/protocol/account/util"
+	"github.com/iotexproject/iotex-core/v2/action/protocol/execution/evm"
 	"github.com/iotexproject/iotex-core/v2/action/protocol/rewarding"
 	"github.com/iotexproject/iotex-core/v2/actpool"
 	"github.com/iotexproject/iotex-core/v2/actpool/actioniterator"
@@ -437,7 +438,7 @@ func (ws *workingSet) Close() {
 	ws.store.Close()
 }
 
-func (ws *workingSet) Erigon() (erigonstate.StateWriter, *erigonstate.IntraBlockState, bool) {
+func (ws *workingSet) Erigon() (erigonstate.StateWriter, evm.ErigonIntraBlockState, bool) {
 	switch st := ws.store.(type) {
 	case *stateDBWorkingSetStoreWithErigonOutput:
 		return st.erigonStore.tsw, st.erigonStore.intraBlockState, false
