@@ -83,7 +83,7 @@ func (store *stateDBWorkingSetStore) WriteBatch(bat batch.KVStoreBatch) error {
 func (store *stateDBWorkingSetStore) Put(ns string, key []byte, value []byte) error {
 	store.lock.Lock()
 	defer store.lock.Unlock()
-	log.L().Info("wss put value", zap.String("namespace", ns), log.Hex("key", key), log.Hex("value", value))
+	log.L().Info("wss put value", zap.String("namespace", ns), log.Hex("key", key), log.Hex("value", value), zap.Stack("stack"))
 	if err := store.flusher.KVStoreWithBuffer().Put(ns, key, value); err != nil {
 		return errors.Wrap(err, "failed to put value")
 	}
