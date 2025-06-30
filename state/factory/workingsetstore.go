@@ -11,10 +11,12 @@ import (
 
 	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/db"
 	"github.com/iotexproject/iotex-core/v2/db/batch"
+	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/pkg/util/byteutil"
 	"github.com/iotexproject/iotex-core/v2/state"
 )
@@ -56,6 +58,19 @@ func (store *stateDBWorkingSetStore) Filter(ns string, cond db.Condition, start,
 func (store *stateDBWorkingSetStore) WriteBatch(bat batch.KVStoreBatch) error {
 	store.lock.Lock()
 	defer store.lock.Unlock()
+	log.L().Info("wss write batch", zap.Int("size", bat.Size()))
+	for i := 0; i < bat.Size(); i++ {
+		entry, err := bat.Entry(i)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get entry at index %d", i)
+		}
+		log.L().Info("wss write batch entry",
+			zap.Int("idx", i),
+			zap.String("namespace", entry.Namespace()),
+			log.Hex("key", entry.Key()),
+			log.Hex("value", entry.Value()),
+		)
+	}
 	if err := store.flusher.KVStoreWithBuffer().WriteBatch(bat); err != nil {
 		return errors.Wrap(err, "failed to write batch")
 	}
@@ -68,6 +83,7 @@ func (store *stateDBWorkingSetStore) WriteBatch(bat batch.KVStoreBatch) error {
 func (store *stateDBWorkingSetStore) Put(ns string, key []byte, value []byte) error {
 	store.lock.Lock()
 	defer store.lock.Unlock()
+	log.L().Info("wss put value", zap.String("namespace", ns), log.Hex("key", key), log.Hex("value", value))
 	if err := store.flusher.KVStoreWithBuffer().Put(ns, key, value); err != nil {
 		return errors.Wrap(err, "failed to put value")
 	}
