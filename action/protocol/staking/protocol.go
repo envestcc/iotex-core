@@ -111,7 +111,7 @@ type (
 func WithContractStakingIndexerV3(indexer ContractStakingIndexer) Option {
 	return func(p *Protocol) {
 		p.contractStakingIndexerV3 = indexer
-		p.config.TimestampedMigrateContractAddress = indexer.ContractAddress()
+		p.config.TimestampedMigrateContractAddress = indexer.ContractAddress().String()
 		return
 	}
 }
@@ -166,7 +166,7 @@ func NewProtocol(
 	voteReviser := NewVoteReviser(cfg.Revise)
 	migrateContractAddress := ""
 	if contractStakingIndexerV2 != nil {
-		migrateContractAddress = contractStakingIndexerV2.ContractAddress()
+		migrateContractAddress = contractStakingIndexerV2.ContractAddress().String()
 	}
 	p := &Protocol{
 		addr: addr,
@@ -205,21 +205,21 @@ func ProtocolAddr() address.Address {
 func (p *Protocol) Start(ctx context.Context, sr protocol.StateReader) (protocol.View, error) {
 	contractsStake := &contractStakeView{}
 	if p.contractStakingIndexer != nil {
-		view, err := p.contractStakingIndexer.StartView(ctx)
+		view, err := p.contractStakingIndexer.LoadStakeView(ctx, sr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to start contract staking indexer")
 		}
 		contractsStake.v1 = view
 	}
 	if p.contractStakingIndexerV2 != nil {
-		view, err := p.contractStakingIndexerV2.StartView(ctx)
+		view, err := p.contractStakingIndexerV2.LoadStakeView(ctx, sr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to start contract staking indexer v2")
 		}
 		contractsStake.v2 = view
 	}
 	if p.contractStakingIndexerV3 != nil {
-		view, err := p.contractStakingIndexerV3.StartView(ctx)
+		view, err := p.contractStakingIndexerV3.LoadStakeView(ctx, sr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to start contract staking indexer v3")
 		}
@@ -386,13 +386,18 @@ func (p *Protocol) CreatePreStates(ctx context.Context, sm protocol.StateManager
 	if err != nil {
 		return err
 	}
+	if blkCtx.BlockHeight == g.ToBeEnabledBlockHeight {
+		if err := v.(*ViewData).contractsStake.FlushBuckets(sm); err != nil {
+			return errors.Wrap(err, "failed to write buckets")
+		}
+	}
 	if err = v.(*ViewData).contractsStake.CreatePreStates(ctx); err != nil {
 		return err
 	}
 	return nil
 }
 
-// PreCommit preforms pre-commit
+// PreCommit performs pre-commit
 func (p *Protocol) PreCommit(ctx context.Context, sm protocol.StateManager) error {
 	height, err := sm.Height()
 	if err != nil {
@@ -409,21 +414,11 @@ func (p *Protocol) PreCommit(ctx context.Context, sm protocol.StateManager) erro
 	if !vd.IsDirty() {
 		return nil
 	}
-	vd = vd.Clone().(*ViewData)
-	if err := vd.Commit(ctx, sm); err != nil {
+	clone := vd.candCenter.Clone()
+	if err := clone.Commit(ctx, sm); err != nil {
 		return err
 	}
-	// persist nameMap/operatorMap and ownerList to stateDB
-	name := vd.candCenter.base.candsInNameMap()
-	op := vd.candCenter.base.candsInOperatorMap()
-	owners := vd.candCenter.base.ownersList()
-	if len(name) == 0 || len(op) == 0 {
-		return ErrNilParameters
-	}
-	if err := writeCandCenterStateToStateDB(sm, name, op, owners); err != nil {
-		return errors.Wrap(err, "failed to write name/operator map to stateDB")
-	}
-	return nil
+	return clone.WriteToStateDB(sm)
 }
 
 // Commit commits the last change
@@ -583,7 +578,7 @@ func (p *Protocol) isActiveCandidate(ctx context.Context, csr CandidiateStateCom
 		// before endorsement feature, candidates with enough amount must be active
 		return true, nil
 	}
-	bucket, err := csr.getBucket(cand.SelfStakeBucketIdx)
+	bucket, err := csr.NativeBucket(cand.SelfStakeBucketIdx)
 	switch {
 	case errors.Cause(err) == state.ErrStateNotExist:
 		// endorse bucket has been withdrawn
@@ -615,6 +610,9 @@ func (p *Protocol) ActiveCandidates(ctx context.Context, sr protocol.StateReader
 		var csVotes *big.Int
 		if protocol.MustGetFeatureCtx(ctx).CreatePostActionStates {
 			csVotes, err = p.contractStakingVotesFromView(ctx, list[i].GetIdentifier(), c.BaseView())
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			// specifying the height param instead of query latest from indexer directly, aims to cause error when indexer falls behind.
 			// the reason of using srHeight-1 is contract indexer is not updated before the block is committed.
@@ -898,37 +896,4 @@ func writeCandCenterStateToStateDB(sm protocol.StateManager, name, op, owners Ca
 	}
 	_, err := sm.PutState(&owners, protocol.NamespaceOption(CandsMapNS), protocol.KeyOption(_ownerKey))
 	return err
-}
-
-// isSelfStakeBucket returns true if the bucket is self-stake bucket and not expired
-func isSelfStakeBucket(featureCtx protocol.FeatureCtx, csc CandidiateStateCommon, bucket *VoteBucket) (bool, error) {
-	// bucket index should be settled in one of candidates
-	selfStake := csc.ContainsSelfStakingBucket(bucket.Index)
-	if featureCtx.DisableDelegateEndorsement || !selfStake {
-		return selfStake, nil
-	}
-
-	// bucket should not be unstaked if it is self-owned
-	if isSelfOwnedBucket(csc, bucket) {
-		return !bucket.isUnstaked(), nil
-	}
-	// otherwise bucket should be an endorse bucket which is not expired
-	esm := NewEndorsementStateReader(csc.SR())
-	height, err := esm.Height()
-	if err != nil {
-		return false, err
-	}
-	status, err := esm.Status(featureCtx, bucket.Index, height)
-	if err != nil {
-		return false, err
-	}
-	return status != EndorseExpired, nil
-}
-
-func isSelfOwnedBucket(csc CandidiateStateCommon, bucket *VoteBucket) bool {
-	cand := csc.GetByIdentifier(bucket.Candidate)
-	if cand == nil {
-		return false
-	}
-	return address.Equal(bucket.Owner, cand.Owner)
 }
