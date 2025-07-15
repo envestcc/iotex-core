@@ -11,10 +11,12 @@ import (
 
 	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/db"
 	"github.com/iotexproject/iotex-core/v2/db/batch"
+	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/pkg/util/byteutil"
 	"github.com/iotexproject/iotex-core/v2/state"
 )
@@ -132,6 +134,7 @@ func (store *stateDBWorkingSetStore) Get(ns string, key []byte) ([]byte, error) 
 	data, err := store.flusher.KVStoreWithBuffer().Get(ns, key)
 	if err != nil {
 		if errors.Cause(err) == db.ErrNotExist {
+			log.L().Error("State not found", zap.Stack("stack"))
 			return nil, errors.Wrapf(state.ErrStateNotExist, "failed to get state of ns = %x and key = %x", ns, key)
 		}
 		return nil, err
