@@ -320,7 +320,10 @@ func (p *Protocol) state(ctx context.Context, sm protocol.StateReader, key []byt
 }
 
 func (p *Protocol) stateCheckLegacy(ctx context.Context, sm protocol.StateReader, key []byte, value interface{}) (uint64, bool, error) {
-	if useV2Storage(ctx) {
+	// it's temporary solution to support tx replay
+	// TODO: remove this after archive is fully supported
+	readOnly := protocol.MustGetBlockCtx(ctx).ReadOnly || protocol.MustGetActionCtx(ctx).ReadOnly
+	if useV2Storage(ctx) || readOnly {
 		h, err := p.stateV2(sm, key, value)
 		if errors.Cause(err) != state.ErrStateNotExist {
 			return h, false, err
