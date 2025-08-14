@@ -8,10 +8,16 @@ package vote
 import (
 	"sort"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/iotexproject/iotex-address/address"
 	"github.com/iotexproject/iotex-proto/golang/iotextypes"
+
+	"github.com/iotexproject/iotex-core/v2/action/protocol"
+	"github.com/iotexproject/iotex-core/v2/state"
+	"github.com/iotexproject/iotex-core/v2/systemcontracts"
 )
 
 // ProbationList defines a map where key is candidate's name and value is the counter which counts the unproductivity during probation epoch.
@@ -19,6 +25,8 @@ type ProbationList struct {
 	ProbationInfo map[string]uint32
 	IntensityRate uint32
 }
+
+var _ protocol.ContractStorage = (*ProbationList)(nil)
 
 // NewProbationList returns a new probation list
 func NewProbationList(intensity uint32) *ProbationList {
@@ -73,4 +81,75 @@ func (pl *ProbationList) LoadProto(probationListpb *iotextypes.ProbationCandidat
 	pl.IntensityRate = probationListpb.IntensityRate
 
 	return nil
+}
+
+func (pl *ProbationList) storageContractAddress(ns string, key []byte) (address.Address, error) {
+	if ns != protocol.SystemNamespace {
+		return nil, errors.Errorf("invalid namespace %s, expected %s", ns, protocol.SystemNamespace)
+	}
+	return systemcontracts.SystemContracts[systemcontracts.PollProbationListContractIndex].Address, nil
+}
+
+func (pl *ProbationList) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
+	addr, err := pl.storageContractAddress(ns, key)
+	if err != nil {
+		return nil, err
+	}
+	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create probation list storage contract")
+	}
+	return contract, nil
+}
+
+func (pl *ProbationList) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	contract, err := pl.storageContract(ns, key, backend)
+	if err != nil {
+		return err
+	}
+	data, err := pl.Serialize()
+	if err != nil {
+		return errors.Wrap(err, "failed to serialize probation list")
+	}
+	if err := contract.Put(key, systemcontracts.GenericValue{PrimaryData: data}); err != nil {
+		return errors.Wrapf(err, "failed to store probation list to contract %s", contract.Address().Hex())
+	}
+	return nil
+}
+
+func (pl *ProbationList) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	contract, err := pl.storageContract(ns, key, backend)
+	if err != nil {
+		return err
+	}
+	value, err := contract.Get(key)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get probation list from contract %s with key %x", contract.Address().Hex(), key)
+	}
+	if !value.KeyExists {
+		return errors.Wrapf(state.ErrStateNotExist, "probation list does not exist in contract %s with key %x", contract.Address().Hex(), key)
+	}
+	if err := pl.Deserialize(value.Value.PrimaryData); err != nil {
+		return errors.Wrap(err, "failed to deserialize probation list")
+	}
+	return nil
+}
+
+func (pl *ProbationList) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	contract, err := pl.storageContract(ns, key, backend)
+	if err != nil {
+		return err
+	}
+	if err := contract.Remove(key); err != nil {
+		return errors.Wrapf(err, "failed to delete probation list from contract %s with key %x", contract.Address().Hex(), key)
+	}
+	return nil
+}
+
+func (pl *ProbationList) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (pl *ProbationList) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
+	return nil, errors.New("not implemented")
 }

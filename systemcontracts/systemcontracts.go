@@ -34,6 +34,16 @@ const (
 	CandidateMapContractIndex
 	// CandidatesContractIndex is the system contract for candidates storage
 	CandidatesContractIndex
+	// PollCandidateListContractIndex is the system contract for poll candidate storage
+	PollCandidateListContractIndex
+	// PollLegacyCandidateListContractIndex is the system contract for poll legacy candidate storage
+	PollLegacyCandidateListContractIndex
+	// PollProbationListContractIndex is the system contract for poll probation list storage
+	PollProbationListContractIndex
+	// PollUnproductiveDelegateContractIndex is the system contract for poll unproductive delegate storage
+	PollUnproductiveDelegateContractIndex
+	// PollBlockMetaContractIndex is the system contract for poll block meta storage
+	PollBlockMetaContractIndex
 	// SystemContractCount is the total number of system contracts
 	SystemContractCount
 )
@@ -55,55 +65,16 @@ func initSystemContracts() {
 		log.S().Panic("failed to decode GenericStorageByteCode: " + err.Error())
 	}
 
-	stakingBucketAddr, err := address.FromBytes(crypto.CreateAddress(common.BytesToAddress(systemContractCreatorAddr[:]), 0).Bytes())
-	if err != nil {
-		log.S().Panic("Invalid staking bucket contract address: " + err.Error())
-	}
-	bucketPoolAddr, err := address.FromBytes(crypto.CreateAddress(common.BytesToAddress(systemContractCreatorAddr[:]), 1).Bytes())
-	if err != nil {
-		log.S().Panic("Invalid bucket pool contract address: " + err.Error())
-	}
-	bucketIndicesAddr, err := address.FromBytes(crypto.CreateAddress(common.BytesToAddress(systemContractCreatorAddr[:]), 2).Bytes())
-	if err != nil {
-		log.S().Panic("Invalid bucket indices contract address: " + err.Error())
-	}
-	endorsementAddr, err := address.FromBytes(crypto.CreateAddress(common.BytesToAddress(systemContractCreatorAddr[:]), 3).Bytes())
-	if err != nil {
-		log.S().Panic("Invalid endorsement contract address: " + err.Error())
-	}
-	candidateMapAddr, err := address.FromBytes(crypto.CreateAddress(common.BytesToAddress(systemContractCreatorAddr[:]), 4).Bytes())
-	if err != nil {
-		log.S().Panic("Invalid candidate map contract address: " + err.Error())
-	}
-	candidatesAddr, err := address.FromBytes(crypto.CreateAddress(common.BytesToAddress(systemContractCreatorAddr[:]), 5).Bytes())
-	if err != nil {
-		log.S().Panic("Invalid candidates contract address: " + err.Error())
-	}
-
 	SystemContracts = make([]SystemContract, SystemContractCount)
-	SystemContracts[StakingBucketsContractIndex] = SystemContract{
-		Address: stakingBucketAddr,
-		Code:    genericStorageByteCode,
-	}
-	SystemContracts[BucketPoolContractIndex] = SystemContract{
-		Address: bucketPoolAddr,
-		Code:    genericStorageByteCode,
-	}
-	SystemContracts[BucketIndicesContractIndex] = SystemContract{
-		Address: bucketIndicesAddr,
-		Code:    genericStorageByteCode,
-	}
-	SystemContracts[EndorsementContractIndex] = SystemContract{
-		Address: endorsementAddr,
-		Code:    genericStorageByteCode,
-	}
-	SystemContracts[CandidateMapContractIndex] = SystemContract{
-		Address: candidateMapAddr,
-		Code:    genericStorageByteCode,
-	}
-	SystemContracts[CandidatesContractIndex] = SystemContract{
-		Address: candidatesAddr,
-		Code:    genericStorageByteCode,
+	for i := 0; i < SystemContractCount; i++ {
+		addr, err := address.FromBytes(crypto.CreateAddress(common.BytesToAddress(systemContractCreatorAddr[:]), uint64(i)).Bytes())
+		if err != nil {
+			log.S().Panic("Invalid system contract address: " + err.Error())
+		}
+		SystemContracts[i] = SystemContract{
+			Address: addr,
+			Code:    genericStorageByteCode,
+		}
 	}
 }
 
