@@ -359,13 +359,6 @@ func (p *Protocol) putStateV2(sm protocol.StateManager, key []byte, value interf
 	return err
 }
 
-func (p *Protocol) deleteState(ctx context.Context, sm protocol.StateManager, key []byte) error {
-	if useV2Storage(ctx) {
-		return p.deleteStateV2(sm, key)
-	}
-	return p.deleteStateV1(sm, key)
-}
-
 func (p *Protocol) deleteStateV1(sm protocol.StateManager, key []byte) error {
 	keyHash := hash.Hash160b(append(p.keyPrefix, key...))
 	_, err := sm.DelState(protocol.LegacyKeyOption(keyHash))

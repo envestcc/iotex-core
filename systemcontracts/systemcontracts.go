@@ -44,6 +44,10 @@ const (
 	PollUnproductiveDelegateContractIndex
 	// PollBlockMetaContractIndex is the system contract for poll block meta storage
 	PollBlockMetaContractIndex
+	// RewardingContractIndex is the system contract for rewarding admin storage
+	RewardingContractV1Index
+	// RewardingContractV2Index is the system contract for rewarding admin storage v2
+	RewardingContractV2Index
 	// SystemContractCount is the total number of system contracts
 	SystemContractCount
 )

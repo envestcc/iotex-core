@@ -9,6 +9,7 @@ import (
 	"context"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 
@@ -24,10 +25,13 @@ import (
 	"github.com/iotexproject/iotex-core/v2/pkg/enc"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/state"
+	"github.com/iotexproject/iotex-core/v2/systemcontracts"
 )
 
 // rewardHistory is the dummy struct to record a reward. Only key matters.
 type rewardHistory struct{}
+
+var _ protocol.ContractStorage = (*rewardHistory)(nil)
 
 // Serialize serializes reward history state into bytes
 func (b rewardHistory) Serialize() ([]byte, error) {
@@ -38,10 +42,80 @@ func (b rewardHistory) Serialize() ([]byte, error) {
 // Deserialize deserializes bytes into reward history state
 func (b *rewardHistory) Deserialize(data []byte) error { return nil }
 
+func (b *rewardHistory) storageContractAddress(ns string, key []byte) (address.Address, error) {
+	if ns == state.AccountKVNamespace {
+		return systemcontracts.SystemContracts[systemcontracts.RewardingContractV1Index].Address, nil
+	} else if ns == _v2RewardingNamespace {
+		return systemcontracts.SystemContracts[systemcontracts.RewardingContractV2Index].Address, nil
+	} else {
+		return nil, errors.Errorf("unexpected namespace %s", ns)
+	}
+}
+
+func (b *rewardHistory) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
+	addr, err := b.storageContractAddress(ns, key)
+	if err != nil {
+		return nil, err
+	}
+	return systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
+}
+
+func (b *rewardHistory) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	addr, err := b.storageContractAddress(ns, key)
+	if err != nil {
+		return err
+	}
+	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
+	if err != nil {
+		return err
+	}
+	data, err := b.Serialize()
+	if err != nil {
+		return err
+	}
+	return contract.Put(key, systemcontracts.GenericValue{PrimaryData: data})
+}
+
+func (b *rewardHistory) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	contract, err := b.storageContract(ns, key, backend)
+	if err != nil {
+		return err
+	}
+	value, err := contract.Get(key)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get reward history from contract %s with key %x", contract.Address().Hex(), key)
+	}
+	if !value.KeyExists {
+		return errors.Wrapf(state.ErrStateNotExist, "reward history does not exist in contract %s with key %x", contract.Address().Hex(), key)
+	}
+	return b.Deserialize(value.Value.PrimaryData)
+}
+
+func (b *rewardHistory) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	contract, err := b.storageContract(ns, key, backend)
+	if err != nil {
+		return err
+	}
+	if err := contract.Remove(key); err != nil {
+		return errors.Wrapf(err, "failed to delete reward history from contract %s with key %x", contract.Address().Hex(), key)
+	}
+	return nil
+}
+
+func (b *rewardHistory) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (b *rewardHistory) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
+	return nil, errors.New("not implemented")
+}
+
 // rewardHistory stores the unclaimed balance of an account
 type rewardAccount struct {
 	balance *big.Int
 }
+
+var _ protocol.ContractStorage = (*rewardAccount)(nil)
 
 // Serialize serializes account state into bytes
 func (a rewardAccount) Serialize() ([]byte, error) {
@@ -63,6 +137,74 @@ func (a *rewardAccount) Deserialize(data []byte) error {
 	}
 	a.balance = balance
 	return nil
+}
+
+func (a *rewardAccount) storageContractAddress(ns string, key []byte) (address.Address, error) {
+	if ns == state.AccountKVNamespace {
+		return systemcontracts.SystemContracts[systemcontracts.RewardingContractV1Index].Address, nil
+	} else if ns == _v2RewardingNamespace {
+		return systemcontracts.SystemContracts[systemcontracts.RewardingContractV2Index].Address, nil
+	} else {
+		return nil, errors.Errorf("unexpected namespace %s", ns)
+	}
+}
+
+func (a *rewardAccount) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
+	addr, err := a.storageContractAddress(ns, key)
+	if err != nil {
+		return nil, err
+	}
+	return systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
+}
+
+func (a *rewardAccount) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	addr, err := a.storageContractAddress(ns, key)
+	if err != nil {
+		return err
+	}
+	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
+	if err != nil {
+		return err
+	}
+	data, err := a.Serialize()
+	if err != nil {
+		return err
+	}
+	return contract.Put(key, systemcontracts.GenericValue{PrimaryData: data})
+}
+
+func (a *rewardAccount) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	contract, err := a.storageContract(ns, key, backend)
+	if err != nil {
+		return err
+	}
+	value, err := contract.Get(key)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get admin state from contract %s with key %x", contract.Address().Hex(), key)
+	}
+	if !value.KeyExists {
+		return errors.Wrapf(state.ErrStateNotExist, "admin state does not exist in contract %s with key %x", contract.Address().Hex(), key)
+	}
+	return a.Deserialize(value.Value.PrimaryData)
+}
+
+func (a *rewardAccount) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
+	contract, err := a.storageContract(ns, key, backend)
+	if err != nil {
+		return err
+	}
+	if err := contract.Remove(key); err != nil {
+		return errors.Wrapf(err, "failed to delete admin state from contract %s with key %x", contract.Address().Hex(), key)
+	}
+	return nil
+}
+
+func (a *rewardAccount) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (a *rewardAccount) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
+	return nil, errors.New("not implemented")
 }
 
 // GrantBlockReward grants the block reward (token) to the block producer
