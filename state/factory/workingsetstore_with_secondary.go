@@ -11,6 +11,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/db"
 	"github.com/iotexproject/iotex-core/v2/db/batch"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
+	"github.com/iotexproject/iotex-core/v2/state"
 )
 
 var (
@@ -174,9 +175,11 @@ func (store *workingSetStoreWithSecondary) CreateGenesisStates(ctx context.Conte
 }
 
 var erigonSupportedNamespace = []string{
-	"Staking",
-	"Candidate",
-	"CandsMap",
+	state.StakingNamespace,
+	state.CandidateNamespace,
+	state.CandsMapNamespace,
+	state.SystemNamespace,
+	state.RewardingNamespace,
 }
 
 func (store *workingSetStoreWithSecondary) GetObject(ns string, key []byte, obj any) error {
