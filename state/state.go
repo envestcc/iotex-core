@@ -9,13 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	// SystemNamespace is the namespace to store system information such as candidates/probationList/unproductiveDelegates
-	SystemNamespace = "System"
-	// AccountKVNamespace is the bucket name for account
-	AccountKVNamespace = "Account"
-)
-
 var (
 	// ErrStateSerialization is the error that the state marshaling is failed
 	ErrStateSerialization = errors.New("failed to marshal state")
