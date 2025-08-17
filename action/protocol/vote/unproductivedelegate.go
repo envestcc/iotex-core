@@ -8,7 +8,6 @@ package vote
 import (
 	"sort"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 
@@ -16,7 +15,6 @@ import (
 
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	updpb "github.com/iotexproject/iotex-core/v2/action/protocol/vote/unproductivedelegatepb"
-	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/state"
 	"github.com/iotexproject/iotex-core/v2/systemcontracts"
 )
@@ -28,7 +26,7 @@ type UnproductiveDelegate struct {
 	cacheSize       uint64
 }
 
-var _ protocol.ContractStorage = (*UnproductiveDelegate)(nil)
+var _ state.ContractStorageStandard = (*UnproductiveDelegate)(nil)
 
 // NewUnproductiveDelegate creates new UnproductiveDelegate with probationperiod and cacheSize
 func NewUnproductiveDelegate(probationPeriod uint64, cacheSize uint64) (*UnproductiveDelegate, error) {
@@ -132,74 +130,13 @@ func (upd *UnproductiveDelegate) DelegateList() [][]string {
 	return upd.delegatelist
 }
 
-func (upd *UnproductiveDelegate) storageContractAddress(ns string, key []byte) (address.Address, error) {
+func (upd *UnproductiveDelegate) ContractStorageAddress(ns string, key []byte) (address.Address, error) {
 	if ns != protocol.SystemNamespace {
 		return nil, errors.Errorf("invalid namespace %s, expected %s", ns, protocol.SystemNamespace)
 	}
 	return systemcontracts.SystemContracts[systemcontracts.PollUnproductiveDelegateContractIndex].Address, nil
 }
 
-func (upd *UnproductiveDelegate) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
-	addr, err := upd.storageContractAddress(ns, key)
-	if err != nil {
-		return nil, err
-	}
-	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create unproductive delegate storage contract")
-	}
-	return contract, nil
-}
-
-func (upd *UnproductiveDelegate) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := upd.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	data, err := upd.Serialize()
-	if err != nil {
-		return errors.Wrap(err, "failed to serialize unproductive delegate")
-	}
-	if err := contract.Put(key, systemcontracts.GenericValue{PrimaryData: data}); err != nil {
-		return errors.Wrapf(err, "failed to store unproductive delegate to contract %s", contract.Address().Hex())
-	}
-	return nil
-}
-
-func (upd *UnproductiveDelegate) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := upd.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	value, err := contract.Get(key)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get unproductive delegate from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if !value.KeyExists {
-		return errors.Wrapf(state.ErrStateNotExist, "unproductive delegate does not exist in contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if err := upd.Deserialize(value.Value.PrimaryData); err != nil {
-		return errors.Wrap(err, "failed to deserialize unproductive delegate")
-	}
-	return nil
-}
-
-func (upd *UnproductiveDelegate) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := upd.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	if err := contract.Remove(key); err != nil {
-		return errors.Wrapf(err, "failed to delete unproductive delegate from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	log.S().Debugf("Deleted unproductive delegate from contract %s with key %x", contract.Address().Hex(), key)
-	return nil
-}
-
-func (upd *UnproductiveDelegate) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
-	return nil, nil, errors.New("not implemented")
-}
-
-func (upd *UnproductiveDelegate) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
-	return nil, errors.New("not implemented")
+func (upd *UnproductiveDelegate) New() state.ContractStorageStandard {
+	return &UnproductiveDelegate{}
 }

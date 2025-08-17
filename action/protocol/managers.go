@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/iotexproject/iotex-core/v2/state"
-	"github.com/iotexproject/iotex-core/v2/systemcontracts"
 )
 
 // NamespaceOption creates an option for given namesapce
@@ -97,14 +96,6 @@ type (
 	StateManagerWithCloser interface {
 		StateManager
 		Close()
-	}
-
-	ContractStorage interface {
-		StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error
-		LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error
-		DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error
-		ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error)
-		BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error)
 	}
 )
 

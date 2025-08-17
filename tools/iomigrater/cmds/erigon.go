@@ -351,7 +351,7 @@ type stateWriter struct {
 }
 
 func (store *stateWriter) PutObject(ns string, key []byte, obj any) (err error) {
-	if cs, ok := obj.(protocol.ContractStorage); ok {
+	if cs, ok := obj.(state.ContractStorage); ok {
 		log.L().Debug("put object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)), zap.String("content", fmt.Sprintf("%+v", obj)))
 		return cs.StoreToContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
@@ -359,7 +359,7 @@ func (store *stateWriter) PutObject(ns string, key []byte, obj any) (err error) 
 }
 
 func (store *stateWriter) GetObject(ns string, key []byte, obj any) error {
-	if cs, ok := obj.(protocol.ContractStorage); ok {
+	if cs, ok := obj.(state.ContractStorage); ok {
 		log.L().Debug("get object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)))
 		return cs.LoadFromContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
@@ -367,7 +367,7 @@ func (store *stateWriter) GetObject(ns string, key []byte, obj any) error {
 }
 
 func (store *stateWriter) List(ns string, obj any) ([][]byte, []any, error) {
-	if cs, ok := obj.(protocol.ContractStorage); ok {
+	if cs, ok := obj.(state.ContractStorage); ok {
 		log.L().Debug("list object", zap.String("namespace", ns), zap.String("type", fmt.Sprintf("%T", obj)))
 		return cs.ListFromContract(ns, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}

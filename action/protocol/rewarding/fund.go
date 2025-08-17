@@ -10,7 +10,6 @@ import (
 	"context"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 
@@ -33,7 +32,7 @@ type fund struct {
 	unclaimedBalance *big.Int
 }
 
-var _ protocol.ContractStorage = (*fund)(nil)
+var _ state.ContractStorageStandard = (*fund)(nil)
 
 // Serialize serializes fund state into bytes
 func (f fund) Serialize() ([]byte, error) {
@@ -63,7 +62,7 @@ func (f *fund) Deserialize(data []byte) error {
 	return nil
 }
 
-func (f *fund) storageContractAddress(ns string, key []byte) (address.Address, error) {
+func (f *fund) ContractStorageAddress(ns string, key []byte) (address.Address, error) {
 	prefix := hash.Hash160b([]byte(_protocolID))
 	if ns == state.AccountKVNamespace {
 		expectKey := hash.Hash160b(append(prefix[:], _fundKey...))
@@ -81,68 +80,8 @@ func (f *fund) storageContractAddress(ns string, key []byte) (address.Address, e
 	return nil, errors.Errorf("unexpected namespace %s", ns)
 }
 
-func (f *fund) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
-	addr, err := f.storageContractAddress(ns, key)
-	if err != nil {
-		return nil, err
-	}
-	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create exempt storage contract")
-	}
-	return contract, nil
-}
-
-func (f *fund) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := f.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	data, err := f.Serialize()
-	if err != nil {
-		return errors.Wrap(err, "failed to serialize fund state")
-	}
-	if err := contract.Put(key, systemcontracts.GenericValue{PrimaryData: data}); err != nil {
-		return errors.Wrapf(err, "failed to store fund state to contract %s", contract.Address())
-	}
-	return nil
-}
-
-func (f *fund) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := f.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	value, err := contract.Get(key)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get fund state from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if !value.KeyExists {
-		return errors.Wrapf(state.ErrStateNotExist, "fund state does not exist in contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if err := f.Deserialize(value.Value.PrimaryData); err != nil {
-		return errors.Wrap(err, "failed to deserialize fund state")
-	}
-	return nil
-}
-
-func (f *fund) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := f.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	if err := contract.Remove(key); err != nil {
-		return errors.Wrapf(err, "failed to delete fund state from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	return nil
-}
-
-func (f *fund) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
-	return nil, nil, errors.New("not implemented")
-}
-
-func (f *fund) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
-	return nil, errors.New("not implemented")
+func (f *fund) New() state.ContractStorageStandard {
+	return &fund{}
 }
 
 // Deposit deposits token into the rewarding fund

@@ -10,7 +10,6 @@ import (
 	"context"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 
@@ -35,7 +34,7 @@ type admin struct {
 	productivityThreshold          uint64
 }
 
-var _ protocol.ContractStorage = (*admin)(nil)
+var _ state.ContractStorageStandard = (*admin)(nil)
 
 // Serialize serializes admin state into bytes
 func (a admin) Serialize() ([]byte, error) {
@@ -83,7 +82,7 @@ func (a *admin) grantFoundationBonus(epoch uint64) bool {
 	return epoch <= a.foundationBonusLastEpoch
 }
 
-func (a *admin) storageContractAddress(ns string, key []byte) (address.Address, error) {
+func (a *admin) ContractStorageAddress(ns string, key []byte) (address.Address, error) {
 	prefix := hash.Hash160b([]byte(_protocolID))
 	if ns == state.AccountKVNamespace {
 		expectKey := hash.Hash160b(append(prefix[:], _adminKey...))
@@ -102,68 +101,8 @@ func (a *admin) storageContractAddress(ns string, key []byte) (address.Address, 
 	}
 }
 
-func (a *admin) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
-	addr, err := a.storageContractAddress(ns, key)
-	if err != nil {
-		return nil, err
-	}
-	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create admin storage contract")
-	}
-	return contract, nil
-}
-
-func (a *admin) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := a.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	data, err := a.Serialize()
-	if err != nil {
-		return errors.Wrap(err, "failed to serialize admin state")
-	}
-	if err := contract.Put(key, systemcontracts.GenericValue{PrimaryData: data}); err != nil {
-		return errors.Wrapf(err, "failed to store admin state to contract %s", contract.Address().Hex())
-	}
-	return nil
-}
-
-func (a *admin) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := a.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	value, err := contract.Get(key)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get admin state from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if !value.KeyExists {
-		return errors.Wrapf(state.ErrStateNotExist, "admin state does not exist in contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if err := a.Deserialize(value.Value.PrimaryData); err != nil {
-		return errors.Wrap(err, "failed to deserialize admin state")
-	}
-	return nil
-}
-
-func (a *admin) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := a.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	if err := contract.Remove(key); err != nil {
-		return errors.Wrapf(err, "failed to delete admin state from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	return nil
-}
-
-func (a *admin) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
-	return nil, nil, errors.New("not implemented")
-}
-
-func (a *admin) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
-	return nil, errors.New("not implemented")
+func (a *admin) New() state.ContractStorageStandard {
+	return &admin{}
 }
 
 // exempt stores the addresses that exempt from epoch reward
@@ -171,7 +110,7 @@ type exempt struct {
 	addrs []address.Address
 }
 
-var _ protocol.ContractStorage = (*exempt)(nil)
+var _ state.ContractStorageStandard = (*exempt)(nil)
 
 // Serialize serializes exempt state into bytes
 func (e *exempt) Serialize() ([]byte, error) {
@@ -199,7 +138,7 @@ func (e *exempt) Deserialize(data []byte) error {
 	return nil
 }
 
-func (e *exempt) storageContractAddress(ns string, key []byte) (address.Address, error) {
+func (e *exempt) ContractStorageAddress(ns string, key []byte) (address.Address, error) {
 	prefix := hash.Hash160b([]byte(_protocolID))
 	if ns == state.AccountKVNamespace {
 		expectKey := hash.Hash160b(append(prefix[:], _exemptKey...))
@@ -218,68 +157,8 @@ func (e *exempt) storageContractAddress(ns string, key []byte) (address.Address,
 	}
 }
 
-func (e *exempt) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
-	addr, err := e.storageContractAddress(ns, key)
-	if err != nil {
-		return nil, err
-	}
-	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create exempt storage contract")
-	}
-	return contract, nil
-}
-
-func (e *exempt) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := e.storageContract(ns, key, backend)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get exempt storage contract")
-	}
-	data, err := e.Serialize()
-	if err != nil {
-		return errors.Wrap(err, "failed to serialize exempt state")
-	}
-	if err := contract.Put(key, systemcontracts.GenericValue{PrimaryData: data}); err != nil {
-		return errors.Wrapf(err, "failed to store exempt state to contract %s", contract.Address().Hex())
-	}
-	return nil
-}
-
-func (e *exempt) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := e.storageContract(ns, key, backend)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get exempt storage contract")
-	}
-	value, err := contract.Get(key)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get exempt state from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if !value.KeyExists {
-		return errors.Wrapf(state.ErrStateNotExist, "exempt state does not exist in contract %s with key %x", contract.Address().Hex(), key)
-	}
-	if err := e.Deserialize(value.Value.PrimaryData); err != nil {
-		return errors.Wrap(err, "failed to deserialize exempt state")
-	}
-	return nil
-}
-
-func (e *exempt) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := e.storageContract(ns, key, backend)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get exempt storage contract")
-	}
-	if err := contract.Remove(key); err != nil {
-		return errors.Wrapf(err, "failed to delete exempt state from contract %s with key %x", contract.Address().Hex(), key)
-	}
-	return nil
-}
-
-func (e *exempt) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
-	return nil, nil, errors.New("not implemented")
-}
-
-func (e *exempt) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
-	return nil, errors.New("not implemented")
+func (e *exempt) New() state.ContractStorageStandard {
+	return &exempt{}
 }
 
 // CreateGenesisStates initializes the rewarding protocol by setting the original admin, block and epoch reward

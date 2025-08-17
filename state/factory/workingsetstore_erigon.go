@@ -55,14 +55,6 @@ type erigonWorkingSetStore struct {
 	ctx             context.Context
 }
 
-type ContractStorage interface {
-	StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error
-	LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error
-	DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error
-	ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error)
-	BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error)
-}
-
 type ErigonOnly interface {
 	ErigonOnly()
 }
@@ -294,9 +286,17 @@ func (store *erigonWorkingSetStore) RevertSnapshot(sn int) error {
 func (store *erigonWorkingSetStore) ResetSnapshots() {}
 
 func (store *erigonWorkingSetStore) PutObject(ns string, key []byte, obj any) (err error) {
-	if cs, ok := obj.(ContractStorage); ok {
-		log.L().Debug("put object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)), zap.String("content", fmt.Sprintf("%+v", obj)))
-		return cs.StoreToContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
+	var (
+		storage state.ContractStorage
+	)
+	if cs, ok := obj.(state.ContractStorage); ok {
+		storage = cs
+	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
+		storage = newContractStorageStandardWrapper(cs)
+	}
+	if storage != nil {
+		log.L().Debug("put object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)), zap.Any("content", obj))
+		return storage.StoreToContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
 	value, err := state.Serialize(obj)
 	if err != nil {
@@ -333,11 +333,17 @@ func (store *erigonWorkingSetStore) Put(ns string, key []byte, value []byte) (er
 }
 
 func (store *erigonWorkingSetStore) GetObject(ns string, key []byte, obj any) error {
-	if cs, ok := obj.(ContractStorage); ok {
+	var storage state.ContractStorage
+	if cs, ok := obj.(state.ContractStorage); ok {
+		storage = cs
+	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
+		storage = newContractStorageStandardWrapper(cs)
+	}
+	if storage != nil {
 		defer func() {
 			log.L().Debug("get object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)))
 		}()
-		return cs.LoadFromContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
+		return storage.LoadFromContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
 	value, err := store.Get(ns, key)
 	if err != nil {
@@ -375,9 +381,15 @@ func (store *erigonWorkingSetStore) Get(ns string, key []byte) ([]byte, error) {
 }
 
 func (store *erigonWorkingSetStore) DeleteObject(ns string, key []byte, obj any) error {
-	if cs, ok := obj.(ContractStorage); ok {
+	var storage state.ContractStorage
+	if cs, ok := obj.(state.ContractStorage); ok {
+		storage = cs
+	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
+		storage = newContractStorageStandardWrapper(cs)
+	}
+	if storage != nil {
 		log.L().Debug("delete object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)))
-		return cs.DeleteFromContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
+		return storage.DeleteFromContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
 	return nil
 }
@@ -395,8 +407,12 @@ func (store *erigonWorkingSetStore) Filter(string, db.Condition, []byte, []byte)
 }
 
 func (store *erigonWorkingSetStore) States(ns string, keys [][]byte, obj any) ([][]byte, [][]byte, error) {
-	cs, ok := obj.(ContractStorage)
-	if !ok {
+	var storage state.ContractStorage
+	if cs, ok := obj.(state.ContractStorage); ok {
+		storage = cs
+	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
+		storage = newContractStorageStandardWrapper(cs)
+	} else {
 		return nil, nil, errors.Wrapf(ErrNotSupported, "unsupported object type %T in ns %s", obj, ns)
 	}
 	var (
@@ -406,9 +422,9 @@ func (store *erigonWorkingSetStore) States(ns string, keys [][]byte, obj any) ([
 		backend = store.newContractBackend(store.ctx, store.intraBlockState, store.sr)
 	)
 	if len(keys) == 0 {
-		keys, objs, err = cs.ListFromContract(ns, backend)
+		keys, objs, err = storage.ListFromContract(ns, backend)
 	} else {
-		objs, err = cs.BatchFromContract(ns, keys, backend)
+		objs, err = storage.BatchFromContract(ns, keys, backend)
 	}
 	log.L().Debug("list objs from erigon working set store",
 		zap.String("ns", ns),
@@ -424,7 +440,7 @@ func (store *erigonWorkingSetStore) States(ns string, keys [][]byte, obj any) ([
 			zap.String("ns", ns),
 			log.Hex("key", keys[i]),
 			zap.String("storage", fmt.Sprintf("%T", obj)),
-			zap.String("content", fmt.Sprintf("%+v", obj)),
+			zap.Any("content", obj),
 		)
 		if obj == nil {
 			results = append(results, nil)

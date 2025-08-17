@@ -36,7 +36,7 @@ func (store *erigonWorkingSetStoreForSimulate) Stop(context.Context) error {
 }
 
 func (store *erigonWorkingSetStoreForSimulate) GetObject(ns string, key []byte, obj any) error {
-	if _, ok := obj.(ContractStorage); ok {
+	if _, ok := obj.(state.ContractStorage); ok {
 		return store.erigonStore.GetObject(ns, key, obj)
 	}
 	if _, ok := obj.(*state.Account); !ok && ns == AccountKVNamespace {
@@ -60,7 +60,7 @@ func (store *erigonWorkingSetStoreForSimulate) Get(ns string, key []byte) ([]byt
 }
 
 func (store *erigonWorkingSetStoreForSimulate) States(ns string, keys [][]byte, obj any) ([][]byte, [][]byte, error) {
-	if _, ok := obj.(ContractStorage); ok {
+	if _, ok := obj.(state.ContractStorage); ok {
 		return store.erigonStore.States(ns, keys, obj)
 	}
 	// currently only used for staking & poll, no need to read from erigon

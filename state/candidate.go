@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/iotexproject/go-pkgs/hash"
 	"github.com/iotexproject/iotex-proto/golang/iotextypes"
 	"github.com/pkg/errors"
@@ -46,6 +45,8 @@ type (
 	// CandidateMap is a map of Candidates using Hash160 as key
 	CandidateMap map[hash.Hash160]*Candidate
 )
+
+var _ ContractStorageStandard = (*CandidateList)(nil)
 
 // Equal compares two candidate instances
 func (c *Candidate) Equal(d *Candidate) bool {
@@ -144,7 +145,7 @@ func (l *CandidateList) LoadProto(candList *iotextypes.CandidateList) error {
 	return nil
 }
 
-func (l *CandidateList) storageContractAddr(ns string, key []byte) (address.Address, error) {
+func (l *CandidateList) ContractStorageAddress(ns string, key []byte) (address.Address, error) {
 	if ns == SystemNamespace {
 		return systemcontracts.SystemContracts[systemcontracts.PollCandidateListContractIndex].Address, nil
 	} else if ns == AccountKVNamespace {
@@ -153,68 +154,8 @@ func (l *CandidateList) storageContractAddr(ns string, key []byte) (address.Addr
 	return nil, errors.Errorf("invalid namespace %s, expected %s or %s", ns, SystemNamespace, AccountKVNamespace)
 }
 
-func (l *CandidateList) storageContract(ns string, key []byte, backend systemcontracts.ContractBackend) (*systemcontracts.GenericStorageContract, error) {
-	addr, err := l.storageContractAddr(ns, key)
-	if err != nil {
-		return nil, err
-	}
-	contract, err := systemcontracts.NewGenericStorageContract(common.BytesToAddress(addr.Bytes()), backend)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create candidate list storage contract")
-	}
-	return contract, nil
-}
-
-func (l *CandidateList) StoreToContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := l.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	data, err := l.Serialize()
-	if err != nil {
-		return errors.Wrap(err, "failed to serialize candidate list")
-	}
-	if err := contract.Put(key, systemcontracts.GenericValue{PrimaryData: data}); err != nil {
-		return errors.Wrapf(err, "failed to store candidate list to contract %s", contract.Address().Hex())
-	}
-	return nil
-}
-
-func (l *CandidateList) LoadFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := l.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	value, err := contract.Get(key)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get candidate list from contract %s", contract.Address().Hex())
-	}
-	if !value.KeyExists {
-		return errors.Wrapf(ErrStateNotExist, "bucket indices does not exist in contract")
-	}
-	if err := l.Deserialize(value.Value.PrimaryData); err != nil {
-		return errors.Wrap(err, "failed to deserialize candidate list")
-	}
-	return nil
-}
-
-func (l *CandidateList) DeleteFromContract(ns string, key []byte, backend systemcontracts.ContractBackend) error {
-	contract, err := l.storageContract(ns, key, backend)
-	if err != nil {
-		return err
-	}
-	if err := contract.Remove(key); err != nil {
-		return errors.Wrapf(err, "failed to delete candidate list from contract %s", contract.Address().Hex())
-	}
-	return nil
-}
-
-func (l *CandidateList) ListFromContract(ns string, backend systemcontracts.ContractBackend) ([][]byte, []any, error) {
-	return nil, nil, errors.New("not implemented")
-}
-
-func (l *CandidateList) BatchFromContract(ns string, keys [][]byte, backend systemcontracts.ContractBackend) ([]any, error) {
-	return nil, errors.New("not implemented")
+func (l *CandidateList) New() ContractStorageStandard {
+	return &CandidateList{}
 }
 
 // candidateToPb converts a candidate to protobuf's candidate message
