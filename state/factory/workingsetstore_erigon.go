@@ -292,7 +292,7 @@ func (store *erigonWorkingSetStore) PutObject(ns string, key []byte, obj any) (e
 	if cs, ok := obj.(state.ContractStorage); ok {
 		storage = cs
 	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = newContractStorageStandardWrapper(cs)
+		storage = NewContractStorageStandardWrapper(cs)
 	}
 	if storage != nil {
 		log.L().Debug("put object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)), zap.Any("content", obj))
@@ -337,7 +337,7 @@ func (store *erigonWorkingSetStore) GetObject(ns string, key []byte, obj any) er
 	if cs, ok := obj.(state.ContractStorage); ok {
 		storage = cs
 	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = newContractStorageStandardWrapper(cs)
+		storage = NewContractStorageStandardWrapper(cs)
 	}
 	if storage != nil {
 		defer func() {
@@ -385,7 +385,7 @@ func (store *erigonWorkingSetStore) DeleteObject(ns string, key []byte, obj any)
 	if cs, ok := obj.(state.ContractStorage); ok {
 		storage = cs
 	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = newContractStorageStandardWrapper(cs)
+		storage = NewContractStorageStandardWrapper(cs)
 	}
 	if storage != nil {
 		log.L().Debug("delete object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)))
@@ -411,7 +411,7 @@ func (store *erigonWorkingSetStore) States(ns string, keys [][]byte, obj any) ([
 	if cs, ok := obj.(state.ContractStorage); ok {
 		storage = cs
 	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = newContractStorageStandardWrapper(cs)
+		storage = NewContractStorageStandardWrapper(cs)
 	} else {
 		return nil, nil, errors.Wrapf(ErrNotSupported, "unsupported object type %T in ns %s", obj, ns)
 	}

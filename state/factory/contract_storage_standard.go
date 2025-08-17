@@ -13,9 +13,7 @@ type contractStorageStandardWrapper struct {
 	standard state.ContractStorageStandard
 }
 
-var _ state.ContractStorage = (*contractStorageStandardWrapper)(nil)
-
-func newContractStorageStandardWrapper(standard state.ContractStorageStandard) *contractStorageStandardWrapper {
+func NewContractStorageStandardWrapper(standard state.ContractStorageStandard) state.ContractStorage {
 	return &contractStorageStandardWrapper{standard: standard}
 }
 
