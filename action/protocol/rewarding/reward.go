@@ -404,7 +404,7 @@ func (p *Protocol) grantToAccount(ctx context.Context, sm protocol.StateManager,
 		// entry exist
 		// check if from legacy, and we have started using v2, delete v1
 		if fromLegacy && useV2Storage(ctx) {
-			if err := p.deleteStateV1(sm, accKey); err != nil {
+			if err := p.deleteStateV1(sm, accKey, &rewardAccount{}); err != nil {
 				return err
 			}
 		}
@@ -431,7 +431,7 @@ func (p *Protocol) claimFromAccount(ctx context.Context, sm protocol.StateManage
 		return err
 	}
 	if fromLegacy && useV2Storage(ctx) {
-		if err := p.deleteStateV1(sm, accKey); err != nil {
+		if err := p.deleteStateV1(sm, accKey, &rewardAccount{}); err != nil {
 			return err
 		}
 	}
