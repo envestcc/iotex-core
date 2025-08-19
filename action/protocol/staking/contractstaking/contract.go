@@ -1,9 +1,14 @@
 package contractstaking
 
 import (
-	"github.com/iotexproject/iotex-core/v2/action/protocol/staking/stakingpb"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/iotexproject/iotex-address/address"
+
+	"github.com/iotexproject/iotex-core/v2/action/protocol/staking/stakingpb"
+	"github.com/iotexproject/iotex-core/v2/state"
+	"github.com/iotexproject/iotex-core/v2/systemcontracts"
 )
 
 // StakingContract represents the staking contract in the system
@@ -49,4 +54,16 @@ func (sc *StakingContract) Deserialize(b []byte) error {
 	}
 	*sc = *loaded
 	return nil
+}
+
+func (sc *StakingContract) ContractStorageAddress(ns string, key []byte) (address.Address, error) {
+	return systemcontracts.SystemContracts[systemcontracts.StakingViewContractIndex].Address, nil
+}
+
+func (sc *StakingContract) New() state.ContractStorageStandard {
+	return &StakingContract{}
+}
+
+func (sc *StakingContract) ContractStorageProxy() state.ContractStorage {
+	return state.NewContractStorageNamespacedWrapper(sc)
 }

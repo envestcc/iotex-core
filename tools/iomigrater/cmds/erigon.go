@@ -356,7 +356,7 @@ func (store *stateWriter) PutObject(ns string, key []byte, obj any) (err error) 
 		return cs.StoreToContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
 		log.L().Debug("put object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)), zap.String("content", fmt.Sprintf("%+v", obj)))
-		return factory.NewContractStorageStandardWrapper(cs).StoreToContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
+		return state.NewContractStorageStandardWrapper(cs).StoreToContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
 	return errors.Wrapf(factory.ErrNotSupported, "PutObject is not supported for type %T in namespace %s with key %x", obj, ns, key)
 }
@@ -367,7 +367,7 @@ func (store *stateWriter) GetObject(ns string, key []byte, obj any) error {
 		return cs.LoadFromContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
 		log.L().Debug("get object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)))
-		return factory.NewContractStorageStandardWrapper(cs).LoadFromContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
+		return state.NewContractStorageStandardWrapper(cs).LoadFromContract(ns, key, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
 	return errors.Wrapf(factory.ErrNotSupported, "GetObject is not supported for type %T in namespace %s with key %x", obj, ns, key)
 }
@@ -378,7 +378,7 @@ func (store *stateWriter) List(ns string, obj any) ([][]byte, []any, error) {
 		return cs.ListFromContract(ns, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
 		log.L().Debug("list object", zap.String("namespace", ns), zap.String("type", fmt.Sprintf("%T", obj)))
-		return factory.NewContractStorageStandardWrapper(cs).ListFromContract(ns, newContractBackend(store.ctx, store.intraBlockState, store.sr))
+		return state.NewContractStorageStandardWrapper(cs).ListFromContract(ns, newContractBackend(store.ctx, store.intraBlockState, store.sr))
 	}
 	return nil, nil, errors.Wrapf(factory.ErrNotSupported, "List is not supported for type %T in namespace %s", obj, ns)
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -44,17 +43,27 @@ const (
 	PollUnproductiveDelegateContractIndex
 	// PollBlockMetaContractIndex is the system contract for poll block meta storage
 	PollBlockMetaContractIndex
-	// RewardingContractIndex is the system contract for rewarding admin storage
+	// RewardingContractV1Index is the system contract for rewarding admin storage
 	RewardingContractV1Index
 	// RewardingContractV2Index is the system contract for rewarding admin storage v2
 	RewardingContractV2Index
+	// StakingViewContractIndex is the system contract for staking view storage
+	StakingViewContractIndex
 	// SystemContractCount is the total number of system contracts
 	SystemContractCount
 )
 
+const (
+	defaultSystemContractType = iota
+	namespaceStorageContractType
+)
+
+var systemContractTypes = map[int]int{
+	StakingViewContractIndex: namespaceStorageContractType,
+}
+
 // SystemContracts holds all system contracts
 var SystemContracts []SystemContract
-var systemContractsInitialized bool
 
 var systemContractCreatorAddr = hash.Hash160b([]byte("system_contract_creator"))
 
@@ -68,6 +77,10 @@ func initSystemContracts() {
 	if err != nil {
 		log.S().Panic("failed to decode GenericStorageByteCode: " + err.Error())
 	}
+	namespaceStorageByteCode, err := hex.DecodeString(NamespaceStorageContractByteCodeStr)
+	if err != nil {
+		log.S().Panic("failed to decode NamespaceStorageContractByteCode: " + err.Error())
+	}
 
 	SystemContracts = make([]SystemContract, SystemContractCount)
 	for i := 0; i < SystemContractCount; i++ {
@@ -75,25 +88,18 @@ func initSystemContracts() {
 		if err != nil {
 			log.S().Panic("Invalid system contract address: " + err.Error())
 		}
+		var byteCode []byte
+		switch systemContractTypes[i] {
+		case namespaceStorageContractType:
+			byteCode = namespaceStorageByteCode
+		default:
+			byteCode = genericStorageByteCode
+		}
 		SystemContracts[i] = SystemContract{
 			Address: addr,
-			Code:    genericStorageByteCode,
+			Code:    byteCode,
 		}
 	}
-}
-
-// ErrStateNotExist is the error that the state does not exist
-var ErrStateNotExist = fmt.Errorf("state not found")
-
-// isContractError checks if the error contains a specific contract error selector
-func isContractError(err error, errorName string) bool {
-	if err == nil {
-		return false
-	}
-	errorStr := err.Error()
-	// Check if error string contains revert with the specific error name
-	// Solidity custom errors are typically reverted with the error name
-	return strings.Contains(errorStr, "revert") && strings.Contains(errorStr, errorName)
 }
 
 // ContractBackend defines the interface for contract backend operations

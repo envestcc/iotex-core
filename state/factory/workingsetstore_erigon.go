@@ -286,14 +286,7 @@ func (store *erigonWorkingSetStore) RevertSnapshot(sn int) error {
 func (store *erigonWorkingSetStore) ResetSnapshots() {}
 
 func (store *erigonWorkingSetStore) PutObject(ns string, key []byte, obj any) (err error) {
-	var (
-		storage state.ContractStorage
-	)
-	if cs, ok := obj.(state.ContractStorage); ok {
-		storage = cs
-	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = NewContractStorageStandardWrapper(cs)
-	}
+	storage := store.objectContractStorage(obj)
 	if storage != nil {
 		log.L().Debug("put object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)), zap.Any("content", obj))
 		return storage.StoreToContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
@@ -333,12 +326,7 @@ func (store *erigonWorkingSetStore) Put(ns string, key []byte, value []byte) (er
 }
 
 func (store *erigonWorkingSetStore) GetObject(ns string, key []byte, obj any) error {
-	var storage state.ContractStorage
-	if cs, ok := obj.(state.ContractStorage); ok {
-		storage = cs
-	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = NewContractStorageStandardWrapper(cs)
-	}
+	storage := store.objectContractStorage(obj)
 	if storage != nil {
 		defer func() {
 			log.L().Debug("get object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)))
@@ -381,12 +369,7 @@ func (store *erigonWorkingSetStore) Get(ns string, key []byte) ([]byte, error) {
 }
 
 func (store *erigonWorkingSetStore) DeleteObject(ns string, key []byte, obj any) error {
-	var storage state.ContractStorage
-	if cs, ok := obj.(state.ContractStorage); ok {
-		storage = cs
-	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = NewContractStorageStandardWrapper(cs)
-	}
+	storage := store.objectContractStorage(obj)
 	if storage != nil {
 		log.L().Debug("delete object", zap.String("namespace", ns), log.Hex("key", key), zap.String("type", fmt.Sprintf("%T", obj)))
 		return storage.DeleteFromContract(ns, key, store.newContractBackend(store.ctx, store.intraBlockState, store.sr))
@@ -407,12 +390,8 @@ func (store *erigonWorkingSetStore) Filter(string, db.Condition, []byte, []byte)
 }
 
 func (store *erigonWorkingSetStore) States(ns string, keys [][]byte, obj any) ([][]byte, [][]byte, error) {
-	var storage state.ContractStorage
-	if cs, ok := obj.(state.ContractStorage); ok {
-		storage = cs
-	} else if cs, ok := obj.(state.ContractStorageStandard); ok {
-		storage = NewContractStorageStandardWrapper(cs)
-	} else {
+	storage := store.objectContractStorage(obj)
+	if storage == nil {
 		return nil, nil, errors.Wrapf(ErrNotSupported, "unsupported object type %T in ns %s", obj, ns)
 	}
 	var (
@@ -492,4 +471,17 @@ func (store *erigonWorkingSetStore) newContractBackend(ctx context.Context, intr
 	}
 	bcCtx := protocol.MustGetBlockchainCtx(ctx)
 	return NewContractBackend(store.intraBlockState, store.sr, blkCtx.BlockHeight, blkCtx.BlockTimeStamp, &g, bcCtx.EvmNetworkID)
+}
+
+func (store *erigonWorkingSetStore) objectContractStorage(obj any) state.ContractStorage {
+	if cs, ok := obj.(state.ContractStorage); ok {
+		return cs
+	}
+	if cs, ok := obj.(state.ContractStorageProxy); ok {
+		return cs.ContractStorageProxy()
+	}
+	if cs, ok := obj.(state.ContractStorageStandard); ok {
+		return state.NewContractStorageStandardWrapper(cs)
+	}
+	return nil
 }

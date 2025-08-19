@@ -20,3 +20,7 @@ type ContractStorageStandard interface {
 	Serialize() ([]byte, error)
 	Deserialize([]byte) error
 }
+
+type ContractStorageProxy interface {
+	ContractStorageProxy() ContractStorage
+}

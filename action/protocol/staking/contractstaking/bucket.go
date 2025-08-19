@@ -4,9 +4,12 @@ import (
 	"math/big"
 
 	"github.com/iotexproject/iotex-address/address"
-	"github.com/iotexproject/iotex-core/v2/action/protocol/staking/stakingpb"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/iotexproject/iotex-core/v2/action/protocol/staking/stakingpb"
+	"github.com/iotexproject/iotex-core/v2/state"
+	"github.com/iotexproject/iotex-core/v2/systemcontracts"
 )
 
 type (
@@ -109,4 +112,16 @@ func (b *Bucket) Clone() *Bucket {
 		IsTimestampBased: b.IsTimestampBased,
 		Muted:            b.Muted,
 	}
+}
+
+func (b *Bucket) ContractStorageAddress(ns string, key []byte) (address.Address, error) {
+	return systemcontracts.SystemContracts[systemcontracts.StakingViewContractIndex].Address, nil
+}
+
+func (b *Bucket) New() state.ContractStorageStandard {
+	return &Bucket{}
+}
+
+func (b *Bucket) ContractStorageProxy() state.ContractStorage {
+	return state.NewContractStorageNamespacedWrapper(b)
 }
