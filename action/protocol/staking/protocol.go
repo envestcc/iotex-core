@@ -418,7 +418,10 @@ func (p *Protocol) PreCommit(ctx context.Context, sm protocol.StateManager) erro
 	if err := clone.Commit(ctx, sm); err != nil {
 		return err
 	}
-	return clone.WriteToStateDB(sm)
+	if err = clone.WriteToStateDB(sm); err != nil {
+		return errors.Wrap(err, "failed to write candidate center to stateDB")
+	}
+	return vd.Commit(ctx, sm)
 }
 
 // Commit commits the last change

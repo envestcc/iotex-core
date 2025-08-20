@@ -679,6 +679,10 @@ func (builder *Builder) registerStakingProtocol() error {
 	if builder.cs.contractStakingIndexerV3 != nil {
 		opts = append(opts, staking.WithContractStakingIndexerV3(builder.cs.contractStakingIndexerV3))
 	}
+	var indexer staking.ContractStakingIndexerWithBucketType
+	if builder.cs.contractStakingIndexer != nil {
+		indexer = builder.cs.contractStakingIndexer
+	}
 	stakingProtocol, err := staking.NewProtocol(
 		staking.HelperCtx{
 			DepositGas:    rewarding.DepositGas,
@@ -698,7 +702,7 @@ func (builder *Builder) registerStakingProtocol() error {
 			},
 		},
 		nil,
-		builder.cs.contractStakingIndexer,
+		indexer,
 		builder.cs.contractStakingIndexerV2,
 		opts...,
 	)
