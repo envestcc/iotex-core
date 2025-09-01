@@ -7,6 +7,8 @@ package blockindex
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
 	"github.com/iotexproject/iotex-core/v2/blockchain/blockdao"
@@ -112,4 +114,13 @@ func (ig *SyncIndexers) initStartHeight() error {
 		}
 	}
 	return nil
+}
+
+func (ig *SyncIndexers) String() string {
+	var sb strings.Builder
+	for i, indexer := range ig.indexers {
+		height, _ := indexer.Height()
+		sb.WriteString(fmt.Sprintf("Indexer %d: %T, Height: %d\n", i, indexer, height))
+	}
+	return sb.String()
 }
