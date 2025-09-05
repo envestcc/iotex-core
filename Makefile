@@ -25,6 +25,7 @@ BUILD_TARGET_MINICLUSTER=minicluster
 BUILD_TARGET_RECOVER=recover
 BUILD_TARGET_READTIP=readtip
 BUILD_TARGET_IOMIGRATER=iomigrater
+BUILD_TARGET_FULLSYNC=fullsync
 BUILD_TARGET_OS=$(shell go env GOOS)
 BUILD_TARGET_ARCH=$(shell go env GOARCH)
 
@@ -241,6 +242,11 @@ recover:
 .PHONY: ioctl
 ioctl:
 	$(GOBUILD) -ldflags "$(PackageFlags)" -o ./bin/$(BUILD_TARGET_IOCTL) -v ./tools/ioctl
+
+.PHONY: fullsync
+fullsync:
+	$(GOBUILD) -ldflags "$(PackageFlags)" -o ./bin/$(BUILD_TARGET_FULLSYNC) -v ./tools/fullsync
+
 
 .PHONY: newioctl
 newioctl:
