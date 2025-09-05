@@ -485,7 +485,7 @@ func (p *agent) Start(ctx context.Context) error {
 
 func (p *agent) Stop(ctx context.Context) error {
 	if p.host == nil {
-		return ErrAgentNotStarted
+		return nil
 	}
 	log.L().Info("p2p is shutting down.", zap.Error(ctx.Err()))
 	if err := p.reconnectTask.Stop(ctx); err != nil {
