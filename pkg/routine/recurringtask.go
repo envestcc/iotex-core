@@ -69,6 +69,9 @@ func (t *RecurringTask) Start(_ context.Context) error {
 
 // Stop stops the timer
 func (t *RecurringTask) Stop(_ context.Context) error {
+	if !t.IsReady() {
+		return nil
+	}
 	// prevent stop is called before start.
 	if err := t.TurnOff(); err != nil {
 		return err

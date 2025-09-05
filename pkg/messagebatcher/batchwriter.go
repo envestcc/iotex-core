@@ -319,6 +319,9 @@ func (bw *batchWriter) Expired() bool {
 }
 
 func (bw *batchWriter) Close() {
+	if !bw.IsReady() {
+		return
+	}
 	bw.TurnOff()
 	close(bw.msgBuffer)
 }

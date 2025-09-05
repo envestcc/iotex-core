@@ -58,6 +58,9 @@ func (s *IndexerCommon) Started() bool {
 
 // Stop stops the indexer
 func (s *IndexerCommon) Stop(ctx context.Context) error {
+	if !s.IsReady() {
+		return nil
+	}
 	if err := s.kvstore.Stop(ctx); err != nil {
 		return err
 	}
