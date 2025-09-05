@@ -279,15 +279,18 @@ func StartServer(ctx context.Context, svr *Server, probeSvr *probe.Server, cfg c
 		}()
 	}
 
+	if err := svr.Start(ctx); err != nil {
+		if err := svr.Stop(context.Background()); err != nil {
+			log.L().Error("Failed to stop server.", zap.Error(err))
+		}
+		log.L().Fatal("Failed to start server.", zap.Error(err))
+		return
+	}
 	defer func() {
 		if err := svr.Stop(context.Background()); err != nil {
 			log.L().Panic("Failed to stop server.", zap.Error(err))
 		}
 	}()
-	if err := svr.Start(ctx); err != nil {
-		log.L().Fatal("Failed to start server.", zap.Error(err))
-		return
-	}
 
 	if _, isGateway := cfg.Plugins[config.GatewayPlugin]; isGateway && cfg.API.ReadyDuration > 0 {
 		// wait for a while to make sure the server is ready
