@@ -8,6 +8,7 @@ package staking
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -645,7 +646,7 @@ func (p *Protocol) ActiveCandidates(ctx context.Context, sr protocol.StateReader
 				return nil, err
 			}
 		}
-
+		fmt.Printf("candidate %s has native votes %s, %s votes from contract staking\n", list[i].GetIdentifier(), list[i].Votes.String(), csVotes.String())
 		list[i].Votes.Add(list[i].Votes, csVotes)
 		active, err := p.isActiveCandidate(ctx, c, list[i])
 		if err != nil {
@@ -857,14 +858,18 @@ func (p *Protocol) contractStakingVotesFromIndexer(ctx context.Context, candidat
 	if p.contractStakingIndexerV3 != nil && featureCtx.TimestampedStakingContract {
 		indexers = append(indexers, p.contractStakingIndexerV3)
 	}
-
+	isTarget := candidate.String() == "io1jzteq7gc5sh8tfp5auz8wwj97kvdapr9y8wzne"
 	for _, indexer := range indexers {
 		btks, err := indexer.BucketsByCandidate(candidate, height)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get BucketsByCandidate from contractStakingIndexer")
 		}
 		for _, b := range btks {
-			votes.Add(votes, p.contractBucketVotes(featureCtx, b))
+			candVotes := p.contractBucketVotes(featureCtx, b)
+			if isTarget {
+				fmt.Printf("nft bucket %d votes: %s indexer address: %s\n", b.Index, candVotes.String(), indexer.ContractAddress())
+			}
+			votes.Add(votes, candVotes)
 		}
 	}
 	return votes, nil
