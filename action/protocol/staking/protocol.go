@@ -858,7 +858,6 @@ func (p *Protocol) contractStakingVotesFromIndexer(ctx context.Context, candidat
 	if p.contractStakingIndexerV3 != nil && featureCtx.TimestampedStakingContract {
 		indexers = append(indexers, p.contractStakingIndexerV3)
 	}
-	isTarget := candidate.String() == "io1jzteq7gc5sh8tfp5auz8wwj97kvdapr9y8wzne"
 	for _, indexer := range indexers {
 		btks, err := indexer.BucketsByCandidate(candidate, height)
 		if err != nil {
@@ -866,9 +865,7 @@ func (p *Protocol) contractStakingVotesFromIndexer(ctx context.Context, candidat
 		}
 		for _, b := range btks {
 			candVotes := p.contractBucketVotes(featureCtx, b)
-			if isTarget {
-				fmt.Printf("nft bucket %d votes: %s indexer address: %s\n", b.Index, candVotes.String(), indexer.ContractAddress())
-			}
+			fmt.Printf("nft bucket %d votes: %s candidate: %s indexer address: %s\n", b.Index, candVotes.String(), candidate.String(), indexer.ContractAddress())
 			votes.Add(votes, candVotes)
 		}
 	}
