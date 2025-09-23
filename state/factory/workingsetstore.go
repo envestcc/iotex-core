@@ -7,6 +7,7 @@ package factory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/iotexproject/go-pkgs/hash"
@@ -65,6 +66,7 @@ func (store *stateDBWorkingSetStore) WriteBatch(bat batch.KVStoreBatch) error {
 func (store *stateDBWorkingSetStore) Put(ns string, key []byte, value []byte) error {
 	store.lock.Lock()
 	defer store.lock.Unlock()
+	fmt.Printf("PutState: ns=%s, key=%x, value=%x\n", ns, key, value)
 	if err := store.flusher.KVStoreWithBuffer().Put(ns, key, value); err != nil {
 		return errors.Wrap(err, "failed to put value")
 	}
@@ -75,6 +77,7 @@ func (store *stateDBWorkingSetStore) Put(ns string, key []byte, value []byte) er
 }
 
 func (store *stateDBWorkingSetStore) Delete(ns string, key []byte) error {
+	fmt.Printf("DeleteState: ns=%s, key=%x\n", ns, key)
 	store.lock.Lock()
 	defer store.lock.Unlock()
 	if err := store.flusher.KVStoreWithBuffer().Delete(ns, key); err != nil {
