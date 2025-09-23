@@ -6,6 +6,7 @@
 package staking
 
 import (
+	"fmt"
 	"math/big"
 	"sort"
 	"strings"
@@ -124,6 +125,7 @@ func (d *Candidate) Collision(c *Candidate) error {
 
 // AddVote adds vote
 func (d *Candidate) AddVote(amount *big.Int) error {
+	fmt.Printf("AddVote: %s, %s + %s = %s\n", d.GetIdentifier().String(), d.Votes.String(), amount.String(), new(big.Int).Add(d.Votes, amount).String())
 	if amount.Sign() < 0 {
 		return action.ErrInvalidAmount
 	}
@@ -133,6 +135,7 @@ func (d *Candidate) AddVote(amount *big.Int) error {
 
 // SubVote subtracts vote
 func (d *Candidate) SubVote(amount *big.Int) error {
+	fmt.Printf("SubVote: %s, %s - %s = %s\n", d.GetIdentifier().String(), d.Votes.String(), amount.String(), new(big.Int).Sub(d.Votes, amount).String())
 	if amount.Sign() < 0 {
 		return action.ErrInvalidAmount
 	}
