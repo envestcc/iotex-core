@@ -45,10 +45,13 @@ func init() {
 
 	// Mark config flag as required
 	rootCmd.MarkPersistentFlagRequired("config")
+
+	// Add subcommands
+	rootCmd.AddCommand(generateChainDBCmd)
 }
 
 // runDetector is the main function that runs the detection
-func runDetector(cmd *cobra.Command, args []string) error {
+func runDetector(_ *cobra.Command, _ []string) error {
 	// Load configuration
 	config, err := internal.LoadConfig(configPath)
 	if err != nil {

@@ -51,6 +51,10 @@ type (
 	}
 )
 
+func NewFileDAOv2(bottom uint64, cfg db.Config, deser *block.Deserializer) (*fileDAOv2, error) {
+	return newFileDAOv2(bottom, cfg, deser)
+}
+
 // newFileDAOv2 creates a new v2 file
 func newFileDAOv2(bottom uint64, cfg db.Config, deser *block.Deserializer) (*fileDAOv2, error) {
 	if bottom == 0 {
