@@ -7,6 +7,7 @@ package factory
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"sort"
 	"time"
@@ -162,6 +163,7 @@ func (ws *workingSet) runAction(
 	selp *action.SealedEnvelope,
 ) (*action.Receipt, error) {
 	actCtx := protocol.MustGetActionCtx(ctx)
+	fmt.Printf("runaction actionHash=%x\n", actCtx.ActionHash)
 	if protocol.MustGetBlockCtx(ctx).GasLimit < actCtx.IntrinsicGas {
 		return nil, action.ErrGasLimit
 	}
