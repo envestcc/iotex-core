@@ -2,9 +2,11 @@ package factory
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/iotexproject/go-pkgs/hash"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/iotexproject/iotex-core/v2/db"
@@ -43,17 +45,19 @@ type writer interface {
 // it's used for PutBlock, generating historical states in erigon
 type workingSetStoreWithSecondary struct {
 	reader
-	writer          workingSetStore
-	writerSecondary workingSetStore
-	snMap           map[int]int
+	writer           workingSetStore
+	writerSecondary  workingSetStore
+	snMap            map[int]int
+	consistencyCheck bool
 }
 
-func newWorkingSetStoreWithSecondary(store workingSetStore, erigonStore workingSetStore) *workingSetStoreWithSecondary {
+func newWorkingSetStoreWithSecondary(store workingSetStore, erigonStore workingSetStore, consistencyCheck bool) *workingSetStoreWithSecondary {
 	return &workingSetStoreWithSecondary{
-		reader:          store,
-		writer:          store,
-		writerSecondary: erigonStore,
-		snMap:           make(map[int]int),
+		reader:           store,
+		writer:           store,
+		writerSecondary:  erigonStore,
+		snMap:            make(map[int]int),
+		consistencyCheck: consistencyCheck,
 	}
 }
 
@@ -149,10 +153,130 @@ func (store *workingSetStoreWithSecondary) CreateGenesisStates(ctx context.Conte
 }
 
 func (store *workingSetStoreWithSecondary) GetObject(ns string, key []byte, obj any) error {
-	return store.reader.GetObject(ns, key, obj)
+	return store.GetObjectWithValidate(ns, key, key, obj)
+}
+
+func (store *workingSetStoreWithSecondary) GetObjectWithValidate(ns string, key, erigonKey []byte, obj any) error {
+	if !store.consistencyCheck {
+		return store.reader.GetObject(ns, key, obj)
+	}
+	// consistency check between two stores
+	cco, ok := obj.(interface {
+		New() any
+		ConsistentEqual(other any) bool
+	})
+	if !ok {
+		return store.reader.GetObject(ns, key, obj)
+	}
+	other := cco.New()
+	err := store.reader.GetObject(ns, key, obj)
+	errOther := store.writerSecondary.GetObject(ns, erigonKey, other)
+	if errors.Cause(err) != errors.Cause(errOther) {
+		prefix := state.PollCandidatesPrefix
+		if ns == state.AccountKVNamespace && errors.Cause(err) == state.ErrStateNotExist && strings.HasPrefix(string(erigonKey), prefix) {
+			// special case for legacy candidate list
+			return err
+		}
+		return errors.Errorf("inconsistent existence %T for ns %s key %x: %v vs %v", obj, ns, key, err, errOther)
+	}
+	if err != nil {
+		return err
+	}
+	if !cco.ConsistentEqual(other) {
+		log.S().Panicf("inconsistent object for ns %s key %x: %T vs %T", ns, key, cco, other)
+		return errors.Errorf("inconsistent object for ns %s key %x: %+v vs %+v", ns, key, cco, other)
+	}
+	return nil
 }
 
 func (store *workingSetStoreWithSecondary) States(ns string, obj any, keys [][]byte) (state.Iterator, error) {
+	iter, err := store.reader.States(ns, obj, keys)
+	if !store.consistencyCheck {
+		return iter, err
+	}
+	cco, ok := obj.(interface {
+		New() any
+		ConsistentEqual(other any) bool
+	})
+	if !ok {
+		return iter, err
+	}
+	otherIter, errOther := store.writerSecondary.States(ns, obj, keys)
+	if errors.Cause(err) != errors.Cause(errOther) {
+		log.S().Panicf("inconsistent existence for ns %s keys %x: %v vs %v", ns, keys, err, errOther)
+		return nil, errors.Errorf("inconsistent existence for ns %s keys %x: %v vs %v", ns, keys, err, errOther)
+	}
+	if err != nil {
+		return iter, err
+	}
+	var (
+		_keys, otherKeys map[string]int
+		objs, otherObjs  []any
+	)
+	_keys = make(map[string]int)
+	otherKeys = make(map[string]int)
+	for {
+		newObj := cco.New()
+		key, iterErr := iter.Next(newObj)
+		if iterErr != nil {
+			if errors.Is(iterErr, state.ErrOutOfBoundary) {
+				break
+			} else if errors.Is(iterErr, state.ErrNilValue) {
+				objs = append(objs, nil)
+				_keys[string(key)] = len(objs) - 1
+				continue
+			} else {
+				return nil, iterErr
+			}
+		}
+		objs = append(objs, newObj)
+		_keys[string(key)] = len(objs) - 1
+	}
+	for {
+		newObj := cco.New()
+		key, iterErr := otherIter.Next(newObj)
+		if iterErr != nil {
+			if errors.Is(iterErr, state.ErrOutOfBoundary) {
+				break
+			} else if errors.Is(iterErr, state.ErrNilValue) {
+				otherObjs = append(otherObjs, nil)
+				otherKeys[string(key)] = len(otherObjs) - 1
+				continue
+			} else {
+				return nil, iterErr
+			}
+		}
+		otherObjs = append(otherObjs, newObj)
+		otherKeys[string(key)] = len(otherObjs) - 1
+	}
+	if len(objs) != len(otherObjs) {
+		log.S().Panicf("inconsistent number of objects for ns %s keys %x: %d vs %d", ns, _keys, len(objs), len(otherObjs))
+		return nil, errors.Errorf("inconsistent number of objects for ns %s keys %x: %d vs %d", ns, keys, len(objs), len(otherObjs))
+	}
+	for ki := range keys {
+		k := string(keys[ki])
+		i := _keys[k]
+		otherIndex, ok := otherKeys[k]
+		if !ok {
+			log.S().Panicf("missing key %x in other store for ns %s", k, ns)
+			return nil, errors.Errorf("missing key %x in other store for ns %s", k, ns)
+		}
+		otherObjsIndex := otherIndex
+		if objs[i] == nil && otherObjs[otherObjsIndex] == nil {
+			continue
+		}
+		if objs[i] == nil || otherObjs[otherObjsIndex] == nil {
+			log.S().Panicf("inconsistent nil object for ns %s key %x: %+v vs %+v\n", ns, k, objs[i], otherObjs[otherObjsIndex])
+			continue
+		}
+		cco := objs[i].(interface {
+			ConsistentEqual(other any) bool
+		})
+		if !cco.ConsistentEqual(otherObjs[otherObjsIndex]) {
+			log.S().Panicf("inconsistent object for ns %s key %x: %+v vs %+v", ns, k, objs[i], otherObjs[otherObjsIndex])
+			return nil, errors.Errorf("inconsistent object for ns %s key %x: %+v vs %+v", ns, k, objs[i], otherObjs[otherObjsIndex])
+		}
+	}
 	return store.reader.States(ns, obj, keys)
 }
 

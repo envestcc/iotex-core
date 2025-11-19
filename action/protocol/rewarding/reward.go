@@ -69,6 +69,15 @@ func (b *rewardHistory) Decode(suffix []byte, v systemcontracts.GenericValue) er
 	return nil
 }
 
+func (b *rewardHistory) New() any {
+	return &rewardHistory{}
+}
+
+func (b *rewardHistory) ConsistentEqual(other any) bool {
+	_, ok := other.(*rewardHistory)
+	return ok
+}
+
 // rewardAccount stores the unclaimed balance of an account
 type rewardAccount struct {
 	balance *big.Int
@@ -108,6 +117,18 @@ func (a *rewardAccount) Encode() (systemcontracts.GenericValue, error) {
 
 func (a *rewardAccount) Decode(v systemcontracts.GenericValue) error {
 	return a.Deserialize(v.AuxiliaryData)
+}
+
+func (a *rewardAccount) New() any {
+	return &rewardAccount{}
+}
+
+func (a *rewardAccount) ConsistentEqual(other any) bool {
+	o, ok := other.(*rewardAccount)
+	if !ok {
+		return false
+	}
+	return a.balance.Cmp(o.balance) == 0
 }
 
 // GrantBlockReward grants the block reward (token) to the block producer

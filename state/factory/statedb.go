@@ -261,6 +261,7 @@ func (sdb *stateDB) newWorkingSet(ctx context.Context, height uint64) (*workingS
 	ws.store = newWorkingSetStoreWithSecondary(
 		ws.store.(*stateDBWorkingSetStore),
 		e,
+		sdb.cfg.Chain.EnableArchiveValidation,
 	)
 	return ws, nil
 }
@@ -455,6 +456,9 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 		return errors.New("failed to get address")
 	}
 	ctx = protocol.WithRegistry(ctx, sdb.registry)
+	if sdb.erigonDB != nil {
+		ctx = protocol.WithErigonCtx(ctx, protocol.ErigonCtx{ConsistencyCheck: sdb.cfg.Chain.EnableArchiveValidation})
+	}
 	ws, isExist, err := sdb.getFromWorkingSets(ctx, blk.HashBlock())
 	if err != nil {
 		return err
