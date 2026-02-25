@@ -450,6 +450,9 @@ func (sdb *stateDB) WorkingSetAtHeight(ctx context.Context, height uint64) (prot
 
 // PutBlock persists all changes in RunActions() into the DB
 func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
+	if blk.Height() > 45404173 {
+		panic("STOP after height 45404173")
+	}
 	sdb.mutex.Lock()
 	timer := sdb.timerFactory.NewTimer("Commit")
 	sdb.mutex.Unlock()
