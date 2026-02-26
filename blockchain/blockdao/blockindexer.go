@@ -90,6 +90,9 @@ func (bic *blockIndexerChecker) CheckIndexer(ctx context.Context, indexer BlockI
 	if err != nil {
 		return err
 	}
+	if daoTip > 45404172 {
+		daoTip = 45404172
+	}
 	if tipHeight > daoTip {
 		return errors.New("indexer tip height cannot by higher than dao tip height")
 	}

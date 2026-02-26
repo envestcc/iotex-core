@@ -147,7 +147,10 @@ func (dao *blockDAO) Start(ctx context.Context) error {
 		return err
 	}
 
-	return dao.checkIndexers(ctx, checker)
+	if err := dao.checkIndexers(ctx, checker); err != nil {
+		return err
+	}
+	panic("STOP after blockdao started")
 }
 
 func (dao *blockDAO) checkIndexers(ctx context.Context, checker BlockIndexerChecker) error {
