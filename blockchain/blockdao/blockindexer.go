@@ -96,8 +96,8 @@ func (bic *blockIndexerChecker) CheckIndexer(ctx context.Context, indexer BlockI
 		daoTip = 45404173
 	}
 	if tipHeight > daoTip {
-		if tipHeight == 45404173 {
-			log.L().Warn("indexer tip height is 45404173, skipping...", zap.String("indexer", fmt.Sprintf("%T", indexer)))
+		if tipHeight == 45404174 {
+			log.L().Warn("indexer tip height is 45404174, skipping...", zap.String("indexer", fmt.Sprintf("%T", indexer)))
 			return nil
 		}
 		return errors.Errorf("indexer tip height cannot by higher than dao tip height (dao tip: %d) (indexer %T tip: %d)", daoTip, indexer, tipHeight)
