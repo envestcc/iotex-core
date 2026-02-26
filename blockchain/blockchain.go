@@ -482,6 +482,7 @@ func (bc *blockchain) MintNewBlock(timestamp time.Time, opts ...MintOption) (*bl
 
 // CommitBlock validates and appends a block to the chain
 func (bc *blockchain) CommitBlock(blk *block.Block) error {
+	panic("NOT commit blockchain")
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 	if bc.pause {
