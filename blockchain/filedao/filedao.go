@@ -209,7 +209,7 @@ func (fd *fileDAO) GetBlockByHeight(height uint64) (*block.Block, error) {
 	if fd.legacyFd != nil {
 		return fd.legacyFd.GetBlockByHeight(height)
 	}
-	return nil, errors.Wrap(ErrNotSupported, "failed to get block by height")
+	return nil, errors.Wrapf(ErrNotSupported, "failed to get block by height %d", height)
 }
 
 func (fd *fileDAO) Header(hash hash.Hash256) (*block.Header, error) {
