@@ -138,14 +138,23 @@ func (fd *fileDAO) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var lowestHeight uint64
 	if fd.legacyFd != nil {
-		lowestHeight = 0
-	} else if fd.v2Fd != nil {
-		lowestHeight = fd.v2Fd.Indices[0].start
+		legacyHeight, err := fd.legacyFd.Height()
+		if err != nil {
+			return err
+		}
+		log.L().Info("fileDAO legacy file", zap.Uint64("height", legacyHeight))
+	}
+	if fd.v2Fd != nil {
+		for i, index := range fd.v2Fd.Indices {
+			log.L().Info("fileDAO v2 file",
+				zap.Int("index", i),
+				zap.Uint64("start", index.start),
+				zap.Uint64("end", index.end),
+			)
+		}
 	}
 	log.L().Info("fileDAO started",
-		zap.Uint64("lowestHeight", lowestHeight),
 		zap.Uint64("tipHeight", tipHeight),
 	)
 	return nil
