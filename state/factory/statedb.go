@@ -490,6 +490,7 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 			sdb.currentChainHeight, h,
 		)
 	}
+	panic("NOT Commit!")
 	if err := ws.Commit(ctx, sdb.cfg.Chain.HistoryBlockRetention); err != nil {
 		return err
 	}
