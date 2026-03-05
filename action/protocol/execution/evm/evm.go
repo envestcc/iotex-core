@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"math/big"
 	"time"
@@ -315,6 +316,7 @@ func ExecuteContract(
 		return nil, nil, err
 	}
 	retval, depositGas, remainingGas, contractAddress, statusCode, err := executeInEVM(ctx, ps, stateDB)
+	fmt.Printf("executeInEVM txHash: %s, retval: %s, depositGas: %d, remainingGas: %d, contractAddress: %s, statusCode: %d\n", hex.EncodeToString(ps.actionCtx.ActionHash[:]), hex.EncodeToString(retval), depositGas, remainingGas, contractAddress, statusCode)
 	if err != nil {
 		return nil, nil, err
 	}
