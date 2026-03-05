@@ -295,7 +295,7 @@ func (fd *fileDAOLegacy) ContainsTransactionLog() bool {
 
 func (fd *fileDAOLegacy) TransactionLogs(height uint64) (*iotextypes.TransactionLogs, error) {
 	if !fd.ContainsTransactionLog() {
-		return nil, ErrNotSupported
+		return nil, errors.Wrap(ErrNotSupported, "failed to get transaction log")
 	}
 
 	kvStore, _, err := fd.getDBFromHeight(height)

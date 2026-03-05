@@ -53,7 +53,7 @@ func newTestInMemFd() (*testInMemFd, error) {
 // newFileDAOv2InMem creates a in-memory new v2 fileDAO
 func newFileDAOv2InMem(bottom uint64) (*fileDAOv2, error) {
 	if bottom == 0 {
-		return nil, ErrNotSupported
+		return nil, errors.Wrap(ErrNotSupported, "bottom cannot be 0")
 	}
 
 	fd := fileDAOv2{
@@ -218,7 +218,7 @@ func testVerifyChainDB(t *testing.T, fd FileDAO, start, end uint64) {
 			_, err = fd.GetReceipts(i)
 			r.Equal(db.ErrNotExist, errors.Cause(err))
 			_, err = fd.TransactionLogs(i)
-			r.Equal(ErrNotSupported, err)
+			r.Equal(ErrNotSupported, errors.Cause(err))
 		}
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/pkg/errors"
+
 	"github.com/iotexproject/go-pkgs/hash"
 
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
@@ -25,7 +27,7 @@ type (
 // newFileV2Manager creates an instance of FileV2Manager
 func newFileV2Manager(fds []*fileDAOv2) (*FileV2Manager, error) {
 	if len(fds) == 0 {
-		return nil, ErrNotSupported
+		return nil, errors.Wrap(ErrNotSupported, "failed to create FileV2Manager")
 	}
 
 	fm := FileV2Manager{

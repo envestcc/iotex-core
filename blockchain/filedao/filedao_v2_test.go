@@ -95,7 +95,7 @@ func TestNewFileDAOv2(t *testing.T) {
 	cfg.DbPath = testPath
 	deser := block.NewDeserializer(_defaultEVMNetworkID)
 	_, err = newFileDAOv2(0, cfg, deser)
-	r.Equal(ErrNotSupported, err)
+	r.Equal(ErrNotSupported, errors.Cause(err))
 
 	inMemFd, err := newFileDAOv2InMem(1)
 	r.NoError(err)
@@ -228,7 +228,7 @@ func TestNewFdInterface(t *testing.T) {
 			_, err = fd.GetReceipts(i)
 			r.Equal(db.ErrNotExist, errors.Cause(err))
 			_, err = fd.TransactionLogs(i)
-			r.Equal(ErrNotSupported, err)
+			r.Equal(ErrNotSupported, errors.Cause(err))
 		}
 
 		// after deleting all blocks
@@ -258,7 +258,7 @@ func TestNewFdInterface(t *testing.T) {
 	cfg.DbPath = testPath
 	deser := block.NewDeserializer(_defaultEVMNetworkID)
 	_, err = newFileDAOv2(0, cfg, deser)
-	r.Equal(ErrNotSupported, err)
+	r.Equal(ErrNotSupported, errors.Cause(err))
 	g := genesis.TestDefault()
 	genesis.SetGenesisTimestamp(g.Timestamp)
 	block.LoadGenesisHash(&g)
