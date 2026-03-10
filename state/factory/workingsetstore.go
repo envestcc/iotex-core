@@ -7,6 +7,7 @@ package factory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/iotexproject/go-pkgs/hash"
@@ -79,6 +80,7 @@ func (store *stateDBWorkingSetStore) PutObject(ns string, key []byte, obj any) e
 	if err != nil {
 		return errors.Wrapf(err, "failed to serialize object of ns = %x and key = %x", ns, key)
 	}
+	fmt.Printf("PutObject: ns = %s, key = %x, value = %x\n", ns, key, value)
 	return store.putKV(ns, key, value)
 }
 
@@ -99,6 +101,7 @@ func (store *stateDBWorkingSetStore) putKV(ns string, key []byte, value []byte) 
 }
 
 func (store *stateDBWorkingSetStore) DeleteObject(ns string, key []byte, obj any) error {
+	fmt.Printf("DeleteObject: ns = %s, key = %x\n", ns, key)
 	return store.Delete(ns, key)
 }
 
@@ -157,6 +160,7 @@ func (store *stateDBWorkingSetStore) GetObject(ns string, key []byte, obj any) e
 	if err != nil {
 		return err
 	}
+	fmt.Printf("GetObject: ns = %s, key = %x, value = %x\n", ns, key, v)
 	return state.Deserialize(obj, v)
 }
 
@@ -187,6 +191,7 @@ func (store *stateDBWorkingSetStore) States(ns string, obj any, keys [][]byte) (
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("States: ns = %s, keys = %v, values = %v\n", ns, keys, values)
 	return state.NewIterator(keys, values)
 }
 
