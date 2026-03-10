@@ -80,7 +80,7 @@ func (store *stateDBWorkingSetStore) PutObject(ns string, key []byte, obj any) e
 	if err != nil {
 		return errors.Wrapf(err, "failed to serialize object of ns = %x and key = %x", ns, key)
 	}
-	fmt.Printf("PutObject: ns = %s, key = %x, value = %x\n", ns, key, value)
+	fmt.Printf("PutObject: ns = %s, key = %x, type = %T, value = %x\n", ns, key, obj, value)
 	return store.putKV(ns, key, value)
 }
 
@@ -101,7 +101,7 @@ func (store *stateDBWorkingSetStore) putKV(ns string, key []byte, value []byte) 
 }
 
 func (store *stateDBWorkingSetStore) DeleteObject(ns string, key []byte, obj any) error {
-	fmt.Printf("DeleteObject: ns = %s, key = %x\n", ns, key)
+	fmt.Printf("DeleteObject: ns = %s, key = %x, type = %T\n", ns, key, obj)
 	return store.Delete(ns, key)
 }
 
@@ -160,7 +160,7 @@ func (store *stateDBWorkingSetStore) GetObject(ns string, key []byte, obj any) e
 	if err != nil {
 		return err
 	}
-	fmt.Printf("GetObject: ns = %s, key = %x, value = %x\n", ns, key, v)
+	fmt.Printf("GetObject: ns = %s, key = %x, type = %T, value = %x\n", ns, key, obj, v)
 	return state.Deserialize(obj, v)
 }
 
