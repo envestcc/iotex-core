@@ -1077,3 +1077,139 @@ func TestSelfdestruct6780(t *testing.T) {
 	r.Equal(createdAccount{
 		_c1: struct{}{}}, state.createdAccount)
 }
+
+// TestGetStorageRootPollutesCacheAndWritesBackStaleRoot pins the pre-Yap /
+// pre-PR-#4803 pollution mechanism that is the root cause of the mainnet
+// ioID device-registration revert (iotexinternal/iotex-servers issue #194).
+//
+// The pre-fix behavior:
+//  1. `stateDB.GetStorageRoot(X)` (called by the EVM's CREATE2 collision check
+//     via `getContractWoCreate`) loads X's account from the state manager, wraps
+//     it in a Contract with a fresh empty trie, and adds X to `cachedContract`.
+//  2. Any subsequent `stateDB.Snapshot()` calls `contract.Snapshot()` on every
+//     cached contract; for an async contract (Greenland+) that recomputes the
+//     trie root and writes it into `c.Account.Root`. On an empty storage trie,
+//     that value is the well-known "empty MPT root" (`0x56e8...`), not the
+//     pristine `0x0` the account had on disk.
+//  3. `stateDB.CommitContracts()` iterates every cached contract; without
+//     `SkipWriteCleanContractOption` it calls `sm.PutState(contract.SelfState())`
+//     on the read-only entry too, persisting the mutated `Root` back to state.
+//
+// After `Commit`, the on-disk account has a different `Root` from the original
+// even though its storage was never modified — the persistent "pollution" that
+// pre-Yap mainnet nodes accumulated between 2026-04-15 and 2026-04-28 and that
+// still trips every mint attempt post-Yap because Yap only stops NEW pollution.
+//
+// The fix (`SkipWriteCleanContractOption`) is gated by
+// `AlwaysWriteCachedContract: !g.IsYap(height)` (context.go:347), so pre-Yap
+// blocks reproduce the bug and post-Yap blocks do not.
+func TestGetStorageRootPollutesCacheAndWritesBackStaleRoot(t *testing.T) {
+	r := require.New(t)
+	ctrl := gomock.NewController(t)
+
+	// Empty-MPT root hash from go-ethereum's types.EmptyRootHash.
+	emptyRootHash := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+	victim := common.HexToAddress("0xdeadbeefcafebabe0011223344556677889900aa")
+
+	// Helper: pre-record `victim` on `sm` with a zero storage Root (fresh
+	// contract that has never SSTOREd), so subsequent GetStorageRoot loads it
+	// via `accountutil.Recorded` rather than treating it as ErrStateNotExist.
+	prepopulate := func(sm *mock_chainmanager.MockStateManager) {
+		addrHash := hash.BytesToHash160(victim.Bytes())
+		acc := &state.Account{}
+		// Bump nonce so the account is not a "newbie" and cannot be re-created
+		// by later CreateAccount calls to mask the pollution.
+		r.NoError(acc.SetPendingNonce(1))
+		// Root left as the zero-hash to match the fresh, never-written-to case.
+		_, err := sm.PutState(acc, protocol.LegacyKeyOption(addrHash))
+		r.NoError(err)
+	}
+
+	// Read the current Root of `victim` from the state manager.
+	readRoot := func(sm *mock_chainmanager.MockStateManager) hash.Hash256 {
+		addrHash := hash.BytesToHash160(victim.Bytes())
+		acc := &state.Account{}
+		_, err := sm.State(acc, protocol.LegacyKeyOption(addrHash))
+		r.NoError(err)
+		return acc.Root
+	}
+
+	// Common StateDBAdapter option set. AsyncContractTrie mirrors the
+	// Greenland+ behavior of mainnet at the relevant heights.
+	baseOpts := []StateDBAdapterOption{
+		FixSnapshotOrderOption(),
+		AsyncContractTrieOption(),
+	}
+
+	t.Run("buggy: pre-Yap writes back polluted Root", func(t *testing.T) {
+		sm, err := initMockStateManager(ctrl)
+		r.NoError(err)
+		prepopulate(sm)
+		r.Equal(hash.ZeroHash256, readRoot(sm), "victim starts with zero Root")
+
+		stateDB, err := NewStateDBAdapter(sm, 1, hash.ZeroHash256, baseOpts...)
+		r.NoError(err)
+
+		// Simulate any EVM op that touches victim's storage (SLOAD, SSTORE,
+		// CREATE/CREATE2 collision check in the pre-fix code path, etc.) —
+		// all of them ultimately call `getContract` which adds victim to
+		// `cachedContract` even when the tx doesn't modify anything on it.
+		_, err = stateDB.getContract(victim)
+		r.NoError(err)
+
+		// EVM Snapshot before any nested call. For async contracts (Greenland+)
+		// this recomputes the storage root from the trie — an empty trie
+		// evaluates to the mptrie empty root hash, and that value is written
+		// into `contract.Account.Root` on the ORIGINAL cache entry.
+		stateDB.Snapshot()
+
+		// End-of-tx commit. Without SkipWriteCleanContractOption, the
+		// read-only cache entry is committed and its (mutated) Root is
+		// persisted back to the state manager — this is the on-disk
+		// pollution that pre-Yap mainnet nodes accumulated.
+		r.NoError(stateDB.CommitContracts())
+
+		polluted := readRoot(sm)
+		t.Logf("victim.Root after buggy path: 0x%x", polluted[:])
+		t.Logf("Ethereum EmptyRootHash:       0x%x", emptyRootHash[:])
+		r.NotEqual(hash.ZeroHash256, polluted,
+			"BUG: Root of a never-modified account was rewritten by CommitContracts")
+		// The critical property that turns this pollution into a mainnet-fatal
+		// bug: geth's CREATE2 collision check (core/vm/evm.go:458-467) treats
+		// the address as "colliding" unless storageRoot is either zero OR
+		// equal to `types.EmptyRootHash` (0x56e8...). The polluted Root is
+		// iotex's mptrie empty-root, which is address-prefix-hashed and thus
+		// distinct from Ethereum's constant → any subsequent CREATE2 to X
+		// reverts with `ErrContractAddressCollision`. In the ioID register()
+		// path the ERC-6551 registry catches that as `AccountCreationFailed()`,
+		// a Solidity custom error — receipts get "empty revert reason", which
+		// is precisely the symptom in iotex-servers issue #194.
+		r.NotEqual(hash.Hash256(emptyRootHash), polluted,
+			"pollution is NOT the Ethereum EmptyRootHash, so it fails geth CREATE2 collision check")
+	})
+
+	t.Run("fixed: SkipWriteCleanContract leaves Root untouched", func(t *testing.T) {
+		sm, err := initMockStateManager(ctrl)
+		r.NoError(err)
+		prepopulate(sm)
+		r.Equal(hash.ZeroHash256, readRoot(sm))
+
+		opts := append([]StateDBAdapterOption{}, baseOpts...)
+		opts = append(opts, SkipWriteCleanContractOption())
+		stateDB, err := NewStateDBAdapter(sm, 1, hash.ZeroHash256, opts...)
+		r.NoError(err)
+
+		_, err = stateDB.getContract(victim)
+		r.NoError(err)
+		stateDB.Snapshot()
+		r.NoError(stateDB.CommitContracts())
+
+		after := readRoot(sm)
+		r.Equal(hash.ZeroHash256, after,
+			"FIX: read-only cache entries must not have their Root committed back")
+	})
+
+	// silence lint for the unused emptyRootHash — kept for reference to the
+	// Ethereum-side value that the geth CREATE2 collision check tolerates.
+	_ = emptyRootHash
+}
