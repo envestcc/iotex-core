@@ -33,6 +33,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	accountutil "github.com/iotexproject/iotex-core/v2/action/protocol/account/util"
 	"github.com/iotexproject/iotex-core/v2/db/trie"
+	"github.com/iotexproject/iotex-core/v2/pkg/debughook"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/state"
 )
@@ -1154,9 +1155,16 @@ func (stateDB *StateDBAdapter) SetState(evmAddr common.Address, k, v common.Hash
 }
 
 func (stateDB *StateDBAdapter) GetStorageRoot(evmAddr common.Address) common.Hash {
+	debugOn := debughook.InTargetAction()
 	// check the contract cache first for up-to-date Root
 	if contract, ok := stateDB.cachedContract[evmAddr]; ok {
-		return common.BytesToHash(contract.SelfState().Root[:])
+		root := common.BytesToHash(contract.SelfState().Root[:])
+		if debugOn {
+			log.L().Warn("DEBUG GetStorageRoot (from cache)",
+				zap.String("addr", evmAddr.Hex()),
+				zap.String("root", root.Hex()))
+		}
+		return root
 	}
 	// read the account directly without adding to cachedContract, so that
 	// CommitContracts won't write back an unmodified account with a recomputed
@@ -1164,8 +1172,20 @@ func (stateDB *StateDBAdapter) GetStorageRoot(evmAddr common.Address) common.Has
 	account, err := accountutil.Recorded(stateDB.sm, evmAddr)
 	switch errors.Cause(err) {
 	case nil:
-		return common.BytesToHash(account.Root[:])
+		root := common.BytesToHash(account.Root[:])
+		if debugOn {
+			log.L().Warn("DEBUG GetStorageRoot (from state)",
+				zap.String("addr", evmAddr.Hex()),
+				zap.String("root", root.Hex()),
+				zap.Uint64("nonce", account.PendingNonce()),
+				zap.String("codeHash", hex.EncodeToString(account.CodeHash)))
+		}
+		return root
 	case state.ErrStateNotExist:
+		if debugOn {
+			log.L().Warn("DEBUG GetStorageRoot (state not exist)",
+				zap.String("addr", evmAddr.Hex()))
+		}
 		return common.Hash{}
 	default:
 		log.T(stateDB.ctx).Error("Failed to get account.", zap.Error(err), zap.String("address", evmAddr.Hex()))
@@ -1197,9 +1217,13 @@ func (stateDB *StateDBAdapter) CommitContracts() error {
 	}
 	sort.Slice(contractAddrs, func(i, j int) bool { return bytes.Compare(contractAddrs[i][:], contractAddrs[j][:]) < 0 })
 
+	debugOn := debughook.InTargetAction()
 	for _, addr := range contractAddrs {
 		if _, ok := stateDB.selfDestructed[addr]; ok {
 			// no need to update a SelfDestruct account/contract
+			if debugOn {
+				log.L().Warn("DEBUG CommitContracts skip (selfDestructed)", zap.String("addr", addr.Hex()))
+			}
 			continue
 		}
 		contract := stateDB.cachedContract[addr]
@@ -1208,11 +1232,27 @@ func (stateDB *StateDBAdapter) CommitContracts() error {
 			// modified by SetState/SetCode) does not need Commit or PutState;
 			// skipping it avoids writing back a stale Root that was recomputed by
 			// Snapshot() on an empty storage trie
+			if debugOn {
+				log.L().Warn("DEBUG CommitContracts skip (clean, fix active)",
+					zap.String("addr", addr.Hex()),
+					zap.String("root", common.BytesToHash(contract.SelfState().Root[:]).Hex()))
+			}
 			continue
+		}
+		if debugOn {
+			log.L().Warn("DEBUG CommitContracts writing",
+				zap.String("addr", addr.Hex()),
+				zap.Bool("dirty", contract.Dirty()),
+				zap.String("rootBefore", common.BytesToHash(contract.SelfState().Root[:]).Hex()))
 		}
 		err := contract.Commit()
 		if stateDB.assertError(err, "failed to commit contract", zap.Error(err), zap.String("address", addr.Hex())) {
 			return errors.Wrap(err, "failed to commit contract")
+		}
+		if debugOn {
+			log.L().Warn("DEBUG CommitContracts after Commit()",
+				zap.String("addr", addr.Hex()),
+				zap.String("rootAfter", common.BytesToHash(contract.SelfState().Root[:]).Hex()))
 		}
 		// store the account (with new storage trie root) into account trie
 		_, err = stateDB.sm.PutState(contract.SelfState(), protocol.KeyOption(addr[:]))
@@ -1275,6 +1315,14 @@ func (stateDB *StateDBAdapter) getNewContract(evmAddr common.Address) (Contract,
 	}
 	// add to contract cache
 	stateDB.cachedContract[evmAddr] = contract
+	if debughook.InTargetAction() {
+		log.L().Warn("DEBUG cachedContract add",
+			zap.String("addr", evmAddr.Hex()),
+			zap.String("root", common.BytesToHash(account.Root[:]).Hex()),
+			zap.Uint64("nonce", account.PendingNonce()),
+			zap.String("codeHash", hex.EncodeToString(account.CodeHash)),
+			zap.String("balance", account.Balance.String()))
+	}
 	return contract, nil
 }
 

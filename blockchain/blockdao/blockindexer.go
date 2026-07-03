@@ -15,6 +15,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
 	"github.com/iotexproject/iotex-core/v2/blockchain/genesis"
+	"github.com/iotexproject/iotex-core/v2/pkg/debughook"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
 )
 
@@ -101,10 +102,20 @@ func (bic *blockIndexerChecker) CheckIndexer(ctx context.Context, indexer BlockI
 		targetHeight = daoTip
 	}
 	startHeight := tipHeight + 1
+	if debughook.Enabled() {
+		log.L().Warn("DEBUG catch-up loop starting",
+			zap.Uint64("indexerTip", tipHeight),
+			zap.Uint64("daoTip", daoTip),
+			zap.Uint64("targetHeight", targetHeight),
+			zap.Uint64("debugTargetBlock", debughook.TargetBlock()))
+	}
 	for i := startHeight; i <= targetHeight; i++ {
 		// terminate if context is done
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "terminate the indexer checking")
+		}
+		if debughook.Enabled() && (i%1000 == 0 || debughook.IsTargetBlock(i) || debughook.IsTargetBlock(i+1)) {
+			log.L().Warn("DEBUG catch-up progress", zap.Uint64("height", i))
 		}
 		blk, err := bic.dao.GetBlockByHeight(i)
 		if err != nil {

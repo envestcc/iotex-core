@@ -28,6 +28,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/actpool"
 	"github.com/iotexproject/iotex-core/v2/blockchain/block"
 	"github.com/iotexproject/iotex-core/v2/blockchain/blockdao"
+	"github.com/iotexproject/iotex-core/v2/pkg/debughook"
 	"github.com/iotexproject/iotex-core/v2/blockchain/genesis"
 	"github.com/iotexproject/iotex-core/v2/db"
 	"github.com/iotexproject/iotex-core/v2/db/batch"
@@ -483,6 +484,12 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 	if producer == nil {
 		return errors.New("failed to get address")
 	}
+	targetBlock := debughook.IsTargetBlock(blk.Height())
+	if targetBlock {
+		log.L().Warn("DEBUG entering PutBlock for target block",
+			zap.Uint64("height", blk.Height()),
+			zap.Int("numActions", len(blk.RunnableActions().Actions())))
+	}
 	ctx = protocol.WithRegistry(ctx, sdb.registry)
 	ws, isExist, err := sdb.getFromWorkingSets(ctx, blk.HashBlock())
 	if err != nil {
@@ -507,6 +514,32 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 		return err
 	}
 	blk.Receipts = receipts
+	if targetBlock {
+		for i, r := range receipts {
+			ah := r.ActionHash
+			log.L().Warn("DEBUG receipt in target block",
+				zap.Int("idx", i),
+				zap.String("actionHash", fmt.Sprintf("%x", ah[:])),
+				zap.Uint64("status", r.Status),
+				zap.Uint64("gasConsumed", r.GasConsumed),
+				zap.Int("numLogs", len(r.Logs())))
+		}
+	} else if debughook.Enabled() {
+		// Any non-success receipt (particularly status 106 = ErrExecutionReverted)
+		// during catch-up is a candidate for the same ioID pollution pattern.
+		for i, r := range receipts {
+			if r.Status != 1 {
+				ah := r.ActionHash
+				log.L().Warn("DEBUG non-success receipt during catch-up",
+					zap.Uint64("blockHeight", blk.Height()),
+					zap.Int("idx", i),
+					zap.String("actionHash", fmt.Sprintf("%x", ah[:])),
+					zap.Uint64("status", r.Status),
+					zap.Uint64("gasConsumed", r.GasConsumed),
+					zap.Int("numLogs", len(r.Logs())))
+			}
+		}
+	}
 	h, _ := ws.Height()
 	if sdb.currentChainHeight+1 != h {
 		sdb.mutex.Unlock()
@@ -515,6 +548,10 @@ func (sdb *stateDB) PutBlock(ctx context.Context, blk *block.Block) error {
 			"current state height %d + 1 doesn't match working set height %d",
 			sdb.currentChainHeight, h,
 		)
+	}
+	if targetBlock && debughook.PanicBeforeCommit() {
+		log.L().Warn("DEBUG panic-before-commit at target block — trie.db stays at height-1")
+		panic(fmt.Sprintf("IOID_DEBUG_PANIC_BEFORE_COMMIT hit at height %d", blk.Height()))
 	}
 	if err := ws.Commit(ctx, sdb.cfg.Chain.HistoryBlockRetention); err != nil {
 		sdb.mutex.Unlock()

@@ -31,6 +31,7 @@ import (
 	"github.com/iotexproject/iotex-core/v2/action"
 	"github.com/iotexproject/iotex-core/v2/action/protocol"
 	"github.com/iotexproject/iotex-core/v2/blockchain/genesis"
+	"github.com/iotexproject/iotex-core/v2/pkg/debughook"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/pkg/tracer"
 	"github.com/iotexproject/iotex-core/v2/pkg/util/byteutil"
@@ -314,7 +315,36 @@ func ExecuteContract(
 	if err != nil {
 		return nil, nil, err
 	}
+	// DEBUG: flip the per-action verbose flag if this is the target action, so the
+	// EVM statedb adapter can key its per-op logging off debughook.InTargetAction().
+	debugTarget := debughook.IsTargetAction(ps.actionCtx.ActionHash)
+	if debugTarget {
+		debughook.EnterAction()
+		log.L().Warn("DEBUG entering ExecuteContract for target action",
+			zap.String("actionHash", hex.EncodeToString(ps.actionCtx.ActionHash[:])),
+			zap.Uint64("blockHeight", ps.blkCtx.BlockHeight),
+			zap.Uint64("gas", ps.gas),
+			zap.String("caller", ps.actionCtx.Caller.String()),
+			zap.String("contract", func() string {
+				if ps.contract == nil {
+					return "<nil>"
+				}
+				return ps.contract.Hex()
+			}()),
+			zap.Int("dataLen", len(ps.data)))
+		defer debughook.ExitAction()
+	}
 	retval, depositGas, remainingGas, contractAddress, statusCode, err := executeInEVM(ctx, ps, stateDB)
+	if debugTarget {
+		log.L().Warn("DEBUG ExecuteContract EVM done",
+			zap.Uint64("statusCode", uint64(statusCode)),
+			zap.Uint64("depositGas", depositGas),
+			zap.Uint64("remainingGas", remainingGas),
+			zap.Uint64("consumedGas", depositGas-remainingGas),
+			zap.Int("retvalLen", len(retval)),
+			zap.String("contractAddress", contractAddress),
+			zap.Error(err))
+	}
 	if err != nil {
 		return nil, nil, err
 	}
