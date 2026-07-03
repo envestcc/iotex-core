@@ -286,6 +286,11 @@ func (stateDB *StateDBAdapter) logError(err error) {
 	if stateDB.err == nil {
 		stateDB.err = err
 	}
+	if debughook.InTargetAction() {
+		log.L().Warn("DEBUG stateDB.logError",
+			zap.Error(err),
+			zap.Bool("firstErr", stateDB.err == err))
+	}
 }
 
 func (stateDB *StateDBAdapter) assertError(err error, msg string, fields ...zap.Field) bool {
@@ -1099,6 +1104,13 @@ func (stateDB *StateDBAdapter) SetCode(evmAddr common.Address, code []byte) []by
 		stateDB.logError(err)
 	}
 	contract.SetCode(hash.Hash256b(code), code)
+	if debughook.InTargetAction() {
+		ch := hash.Hash256b(code)
+		log.L().Warn("DEBUG SetCode",
+			zap.String("addr", evmAddr.Hex()),
+			zap.Int("codeLen", len(code)),
+			zap.String("codeHash", hex.EncodeToString(ch[:])))
+	}
 	return prev
 }
 
@@ -1111,6 +1123,12 @@ func (stateDB *StateDBAdapter) GetCommittedState(evmAddr common.Address, k commo
 		return common.Hash{}
 	}
 	v, err := contract.GetCommittedState(hash.BytesToHash256(k[:]))
+	if debughook.InTargetAction() {
+		log.L().Warn("DEBUG GetCommittedState",
+			zap.String("addr", evmAddr.Hex()),
+			zap.String("k", k.Hex()),
+			zap.String("v", common.BytesToHash(v).Hex()))
+	}
 	if err != nil && !errors.Is(err, state.ErrStateNotExist) && !errors.Is(err, trie.ErrNotExist) {
 		log.T(stateDB.ctx).Debug("Failed to get committed state.", zap.Error(err))
 		stateDB.logError(err)
@@ -1133,7 +1151,14 @@ func (stateDB *StateDBAdapter) GetState(evmAddr common.Address, k common.Hash) c
 		stateDB.logError(err)
 		return common.Hash{}
 	}
-	return common.BytesToHash(v)
+	ret := common.BytesToHash(v)
+	if debughook.InTargetAction() {
+		log.L().Warn("DEBUG SLOAD",
+			zap.String("addr", evmAddr.Hex()),
+			zap.String("k", k.Hex()),
+			zap.String("v", ret.Hex()))
+	}
+	return ret
 }
 
 // SetState sets state
@@ -1150,8 +1175,23 @@ func (stateDB *StateDBAdapter) SetState(evmAddr common.Address, k, v common.Hash
 		stateDB.assertError(err, "Failed to get previous state.", zap.Error(err), zap.String("address", evmAddr.Hex()))
 	}
 	err = contract.SetState(hash.BytesToHash256(k[:]), v[:])
+	if err != nil && debughook.InTargetAction() {
+		log.L().Warn("DEBUG SSTORE ERROR",
+			zap.String("addr", evmAddr.Hex()),
+			zap.String("k", k.Hex()),
+			zap.String("new", v.Hex()),
+			zap.Error(err))
+	}
 	stateDB.assertError(err, "Failed to set state.", zap.Error(err), zap.String("address", evmAddr.Hex()))
-	return common.BytesToHash(prev)
+	prevHash := common.BytesToHash(prev)
+	if debughook.InTargetAction() {
+		log.L().Warn("DEBUG SSTORE",
+			zap.String("addr", evmAddr.Hex()),
+			zap.String("k", k.Hex()),
+			zap.String("prev", prevHash.Hex()),
+			zap.String("new", v.Hex()))
+	}
+	return prevHash
 }
 
 func (stateDB *StateDBAdapter) GetStorageRoot(evmAddr common.Address) common.Hash {

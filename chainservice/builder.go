@@ -45,7 +45,6 @@ import (
 	"github.com/iotexproject/iotex-core/v2/db"
 	"github.com/iotexproject/iotex-core/v2/nodeinfo"
 	"github.com/iotexproject/iotex-core/v2/p2p"
-	"github.com/iotexproject/iotex-core/v2/pkg/debughook"
 	"github.com/iotexproject/iotex-core/v2/pkg/log"
 	"github.com/iotexproject/iotex-core/v2/server/itx/nodestats"
 	"github.com/iotexproject/iotex-core/v2/state/factory"
@@ -170,12 +169,6 @@ func (builder *Builder) createFactory(forTest bool) (factory.Factory, error) {
 	opts := []factory.StateDBOption{
 		factory.RegistryStateDBOption(builder.cs.registry),
 		factory.DefaultPatchOption(),
-	}
-	// DEBUG: when tracing the ioID revert we want catch-up to survive digest
-	// mismatches (which are themselves evidence of the state divergence) so we
-	// can observe every polluted block, not just the first.
-	if debughook.Enabled() {
-		opts = append(opts, factory.SkipBlockValidationStateDBOption())
 	}
 	if builder.cfg.Chain.EnableStateDBCaching {
 		dao, err = db.CreateKVStoreWithCache(factoryDBCfg, builder.cfg.Chain.TrieDBPath, builder.cfg.Chain.StateDBCacheSize)

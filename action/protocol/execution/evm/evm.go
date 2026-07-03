@@ -8,6 +8,7 @@ package evm
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"math"
 	"math/big"
 	"time"
@@ -130,6 +131,21 @@ func newParams(
 		vmConfig  vm.Config
 		getHashFn vm.GetHashFunc
 	)
+	// DEBUG: attach opcode tracer when running the target action so we can see
+	// the exact opcode that reverts.
+	if debughook.IsTargetAction(actionCtx.ActionHash) {
+		vmConfig.Tracer = &tracing.Hooks{
+			OnOpcode: func(pc uint64, op byte, gas, cost uint64, scope tracing.OpContext, rData []byte, depth int, err error) {
+				log.L().Warn("DEBUG opcode",
+					zap.Uint64("pc", pc),
+					zap.String("op", vm.OpCode(op).String()),
+					zap.Uint64("gas", gas),
+					zap.Uint64("cost", cost),
+					zap.Int("depth", depth),
+					zap.NamedError("err", err))
+			},
+		}
+	}
 
 	gasLimit := execution.Gas()
 	// Reset gas limit to the system wide action gas limit cap if it's greater than it
@@ -336,14 +352,20 @@ func ExecuteContract(
 	}
 	retval, depositGas, remainingGas, contractAddress, statusCode, err := executeInEVM(ctx, ps, stateDB)
 	if debugTarget {
+		var stateDBErr error
+		if e, ok := stateDB.(interface{ Error() error }); ok {
+			stateDBErr = e.Error()
+		}
 		log.L().Warn("DEBUG ExecuteContract EVM done",
 			zap.Uint64("statusCode", uint64(statusCode)),
 			zap.Uint64("depositGas", depositGas),
 			zap.Uint64("remainingGas", remainingGas),
 			zap.Uint64("consumedGas", depositGas-remainingGas),
 			zap.Int("retvalLen", len(retval)),
+			zap.String("retvalHex", hex.EncodeToString(retval)),
 			zap.String("contractAddress", contractAddress),
-			zap.Error(err))
+			zap.Error(err),
+			zap.NamedError("stateDBErr", stateDBErr))
 	}
 	if err != nil {
 		return nil, nil, err
